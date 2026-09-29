@@ -1,5 +1,5 @@
 // Automatic sync of watchlists, indicators and drawings across devices, stored by the
-// SomethingView Cloudflare Worker (worker/cors-proxy.js, /sync/<key>).
+// SomethingView Cloudflare Worker (worker/index.js, /api/sync/<key>).
 // Each device holds a random sync key; devices sharing a key share data. Link a device by
 // opening the "#sync=<key>" link (or QR code) from Settings → Sync devices.
 import { store } from './store.js';
@@ -9,7 +9,7 @@ import { debounce, withTimeout } from './util.js';
 // Shared across devices. Everything else (current symbol, timeframe, active list, layout) stays per device.
 const SYNCED = ['lists', 'listOrder', 'collapsed', 'drawings', 'indicators', 'indicatorDefaults', 'favIntervals'];
 const ORIGIN = new URL(DEFAULT_PROXY).origin;
-const API = `${ORIGIN}/sync/`;
+const API = `${ORIGIN}/api/sync/`;
 
 let lastJson = null;
 let remoteHandler = () => {};
@@ -33,6 +33,7 @@ async function req(method, body) {
       headers: body ? { 'Content-Type': 'application/json' } : {},
       body: body ? JSON.stringify(body) : undefined,
     });
+    if (res.status === 401) location.reload(); // session expired: show login
     return { status: res.status, json: await res.json().catch(() => null) };
   } finally {
     t.done();
@@ -111,7 +112,7 @@ export async function start() {
 
 // Short, human-typeable code for linking another device (valid 10 minutes, single use)
 export async function createPairCode() {
-  const res = await fetch(`${ORIGIN}/pair`, { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: syncKey() }) });
+  const res = await fetch(`${ORIGIN}/api/pair`, { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: syncKey() }) });
   const j = await res.json().catch(() => ({}));
   if (!res.ok || !j.code) throw new Error(j.error || `pairing error ${res.status}`);
   return j;
@@ -129,7 +130,7 @@ async function keyFrom(input) {
   if (m) return m[0].toLowerCase();
   const code = s.toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (code.length !== 6) throw new Error('Enter the 6-character pairing code shown on your other device');
-  const res = await fetch(`${ORIGIN}/pair/${code}`, { cache: 'no-store' });
+  const res = await fetch(`${ORIGIN}/api/pair/${code}`, { cache: 'no-store' });
   const j = await res.json().catch(() => ({}));
   if (!res.ok || !j.key) throw new Error(j.error || 'Code not found or expired');
   return j.key;

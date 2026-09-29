@@ -321,7 +321,7 @@ function applyTheme() {
 function openSettings() {
   const st = s().settings;
   const theme = h('select', { class: 'input' }, h('option', { value: 'dark', selected: st.theme === 'dark' }, 'Dark'), h('option', { value: 'light', selected: st.theme === 'light' }, 'Light'));
-  const proxy = h('input', { class: 'input', placeholder: 'built-in: somethingview-proxy.itgeeksg.workers.dev', value: st.proxy });
+  const proxy = h('input', { class: 'input', placeholder: 'built-in', value: st.proxy });
   const refresh = h('input', { class: 'input', type: 'number', min: 10, value: st.refreshSec });
 
   const apply = () => {
@@ -350,7 +350,7 @@ function openSettings() {
       h('div', { class: 'form grid2' }, h('label', {}, 'Theme'), theme)),
     h('section', {},
       h('h4', {}, 'Stock / index / FX data'),
-      h('p', { class: 'muted small', html: 'Crypto <b>USDT</b> pairs stream straight from Binance. Everything else comes from Yahoo Finance through your Cloudflare Worker proxy (built in). Leave the field empty to use it; enter a different proxy URL only if you deploy another one.' }),
+      h('p', { class: 'muted small', html: 'Crypto <b>USDT</b> pairs stream straight from Binance. Everything else comes from Yahoo Finance through this site\'s own server (built in). Leave the field empty to use it.' }),
       h('div', { class: 'form grid2' },
         h('label', {}, 'Proxy URL'), proxy,
         h('label', {}, 'Refresh (sec)'), refresh),
@@ -368,6 +368,7 @@ function openSettings() {
           if (!f) return;
           try { store.importData(JSON.parse(f.text)); location.reload(); } catch (e) { toast(e.message, 'error'); }
         } }, 'Import…'),
+        h('button', { class: 'btn', onclick: () => { location.href = '/logout'; } }, 'Sign out'),
         h('button', { class: 'btn danger', onclick: async () => {
           if (await confirm('Reset everything', 'Delete all lists, drawings and settings on this device?', { okText: 'Reset', danger: true })) { store.reset(); location.reload(); }
         } }, 'Reset'))));

@@ -1,7 +1,8 @@
 # SomethingView
 
 A free, self-hosted TradingView-style charting app: candlestick charts, indicators, drawing tools and
-watchlists you can create on the fly. It's a static site (no build step, no backend), so it runs on GitHub Pages.
+watchlists you can create on the fly. It's a static app (no build step) served by a free Cloudflare Worker behind a login, at
+**https://somethingview.itgeeksg.workers.dev**. The old GitHub Pages address forwards there.
 
 ## Features
 
@@ -26,32 +27,24 @@ watchlists you can create on the fly. It's a static site (no build step, no back
 |---|---|---|
 | `BTCUSDT`, `ETHUSDT`, `BINANCE:XXX` | Binance public API and websocket | Real-time, no key |
 | Calculated: `BTCSGD`, `BTCMYR` (= BTCUSD × USDxxx) or any `A*B` / `A/B`, e.g. `BTCUSD/XAUUSD` | Combined from both legs | Like TradingView spreads |
-| Stocks (`AAPL`, `D05.SI`, `0700.HK`), indices (`SPX`, `NDX`, `HSI`, `STI`…), FX (`USDSGD`), futures (`ES1!`), commodities (`XAUUSD`), crypto USD pairs (`BTCUSD`) | Yahoo Finance | Needs a CORS proxy (see below) |
+| Stocks (`AAPL`, `D05.SI`, `0700.HK`), indices (`SPX`, `NDX`, `HSI`, `STI`, `SHCOMP`…), FX (`USDSGD`), futures (`ES1!`), commodities (`XAUUSD`), crypto USD pairs (`BTCUSD`) | Yahoo Finance via the Worker (`/api/yahoo`) | Yahoo has no CORS |
 
-### Yahoo proxy
+## Hosting, login and sync (`worker/`)
 
-This deployment uses its own Cloudflare Worker (`worker/`, deployed at
-`somethingview-proxy.itgeeksg.workers.dev`), which is built in as the default. To redeploy it:
-`cd worker && npx wrangler deploy`.
+The Worker (`worker/index.js`) serves the app files and:
 
-#### Running your own copy
+- **Login**: `/login` checks the username and password. On success it sets a signed, HttpOnly cookie that keeps the
+  device signed in for a year. Everything else (app files and APIs) needs that cookie. The credentials are Worker
+  secrets, not in this repo:
+  `npx wrangler secret put AUTH_USER`, `AUTH_PASS`, and `SESSION_SECRET` (a random string). Changing any of them
+  signs every device out.
+- **`/api/yahoo`**: Yahoo Finance proxy (Yahoo hosts only).
+- **`/api/sync/<key>`** and **`/api/pair`**: device sync, stored in Cloudflare D1 (`somethingview-sync`, see
+  `worker/schema.sql`). To link a phone, click the dot in the top bar and type the 6-character pairing code on the
+  phone. Lists, indicators and drawings sync; the chart, timeframe and layout stay separate on each device.
 
-Browsers can't call Yahoo directly. By default the app uses a free public proxy, which is slow and sometimes down.
-For reliable data:
-
-1. Open the Cloudflare dashboard → **Workers & Pages** → **Create** → **Hello World** worker.
-2. Replace its code with [`worker/cors-proxy.js`](worker/cors-proxy.js) and click **Deploy**.
-3. In SomethingView, open **Settings → Proxy URL** and enter `https://<your-worker>.workers.dev/?url=`, then click **Test**.
-
-The worker only forwards requests to Yahoo Finance, so it isn't an open proxy.
-
-## Sync between devices
-
-Watchlists, indicators and drawings sync automatically through the Worker (`/sync/<key>`, stored in Cloudflare D1).
-Each browser gets a random sync key. To link your phone, click the dot in the top bar (or **Sync devices** in the
-side strip) on the device that has your lists, then scan the QR code with the phone. From then on, changes on
-either device show up on the other within about 20 seconds, or straight away when you switch back to the tab.
-The current chart, timeframe and layout stay separate on each device.
+Deploy after changing anything: `cd worker && npx wrangler deploy`. GitHub Pages serves only the `gh-pages` branch,
+which forwards visitors (and their sync key) to the Worker.
 
 ## Keyboard
 

@@ -1,9 +1,20 @@
-name = "somethingview-proxy"
-main = "cors-proxy.js"
+# SomethingView: serves the app (behind a login) + Yahoo proxy + device sync
+name = "somethingview"
+main = "index.js"
 compatibility_date = "2026-09-01"
+
+# The app's static files (repo root, minus what's listed in /.assetsignore).
+# run_worker_first: every request goes through the login check before a file is served.
+[assets]
+directory = ".."
+binding = "ASSETS"
+run_worker_first = true
 
 # Stores synced watchlists/indicators/drawings (Cloudflare D1, free tier)
 [[d1_databases]]
 binding = "DB"
 database_name = "somethingview-sync"
 database_id = "bac370c0-0684-47f7-853b-53bc285df668"
+
+# Secrets (not in this file): AUTH_USER, AUTH_PASS, SESSION_SECRET
+#   npx wrangler secret put AUTH_PASS

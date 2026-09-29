@@ -81,8 +81,8 @@ function precisionFromPrices(bars) {
 }
 
 // ---------------------------------------------------------------- Yahoo via proxy
-// Your own proxy (worker/cors-proxy.js on Cloudflare). Used on every device without any setup.
-export const DEFAULT_PROXY = 'https://somethingview-proxy.itgeeksg.workers.dev/?url=';
+// Served by the same Cloudflare Worker as the app (worker/index.js), so no setup is needed
+export const DEFAULT_PROXY = `${location.origin}/api/yahoo?url=`;
 
 const tmpl = base => u => (base.includes('{url}') ? base.replace('{url}', encodeURIComponent(u)) : base + encodeURIComponent(u));
 // Free public fallbacks: unreliable, used only when no own proxy is reachable
@@ -119,6 +119,7 @@ async function yahoo(url, timeout = 20000) {
     const t = withTimeout(p.own ? timeout : Math.min(timeout, 25000));
     try {
       const res = await slot(() => fetch(p.build(url), { signal: t.signal }));
+      if (res.status === 401 && p.own) { location.reload(); throw new DataError('Signed out'); } // session expired: show login
       const text = await res.text();
       let json;
       try { json = JSON.parse(text); if (p.unwrap) json = p.unwrap(json); } catch { throw new Error(`proxy returned HTTP ${res.status}`); }
