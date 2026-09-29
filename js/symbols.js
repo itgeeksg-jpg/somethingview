@@ -87,14 +87,30 @@ export function splitBinance(sym) {
 
 function cryptoPair(s) {
   // BTCUSD, ETHBTC, BTCSGD... (base must be a known coin)
-  const m = s.match(/^([A-Z0-9]{2,6}?)(USD|EUR|SGD|GBP|JPY|AUD|CAD|KRW|BTC|ETH)$/);
-  if (m && CRYPTO_NAMES[m[1]] && m[1] !== m[2]) return [m[1], m[2]];
+  const m = s.match(/^([A-Z0-9]{2,6}?)([A-Z]{3})$/);
+  if (m && CRYPTO_NAMES[m[1]] && m[1] !== m[2] && (FIAT[m[2]] || m[2] === 'BTC' || m[2] === 'ETH')) return [m[1], m[2]];
   return null;
 }
 
-// Returns { key, display, src: 'binance'|'yahoo', sym, desc, type }
+// Crypto quote currencies Yahoo has markets for; other fiat quotes are calculated via USD
+const YAHOO_CRYPTO_QUOTES = new Set(['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CNY', 'INR', 'KRW', 'BTC', 'ETH']);
+
+// Calculated symbol from two legs, TradingView spread style: "BTCUSD*USDSGD", "BTCUSD/XAUUSD"
+function synthetic(key, a, op, b, extra = {}) {
+  const legs = [resolve(a), resolve(b)];
+  return {
+    key, display: `${legs[0].display}${op}${legs[1].display}`, src: 'synthetic', sym: key, op, legs,
+    type: extra.type || 'spread', exchange: 'Calculated',
+    desc: extra.desc || `${legs[0].display} ${op === '*' ? '×' : '÷'} ${legs[1].display}`,
+    base: extra.base,
+  };
+}
+
+// Returns { key, display, src: 'binance'|'yahoo'|'synthetic', sym, desc, type }
 export function resolve(raw) {
-  const key = String(raw).trim().toUpperCase();
+  const key = String(raw).trim().toUpperCase().replace(/\s+/g, '');
+  const expr = key.match(/^([^*/]+)([*/])([^*/]+)$/);
+  if (expr) return synthetic(key, expr[1], expr[2], expr[3]);
   let s = key;
   let ex = '';
   if (s.includes(':')) [ex, s] = s.split(':', 2);
@@ -117,6 +133,12 @@ export function resolve(raw) {
   if (!ex || CRYPTO_EXCHANGES.has(ex)) {
     if (/^[A-Z0-9]{2,12}(USDT|USDC|FDUSD)$/.test(s)) return resolve('BINANCE:' + s);
     const cp = cryptoPair(s);
+    if (cp && !YAHOO_CRYPTO_QUOTES.has(cp[1])) {
+      const r = synthetic(key, `${cp[0]}USD`, '*', `USD${cp[1]}`, { type: 'crypto', base: cp[0],
+        desc: `${CRYPTO_NAMES[cp[0]]} / ${FIAT[cp[1]]} (${cp[0]}USD × USD${cp[1]})` });
+      r.display = s;
+      return r;
+    }
     if (cp) return { key, display: s, src: 'yahoo', sym: `${cp[0]}-${cp[1]}`, type: 'crypto', exchange: '',
       desc: `${CRYPTO_NAMES[cp[0]]} / ${QUOTE_NAMES[cp[1]] || cp[1]}` };
   }
@@ -146,6 +168,7 @@ export function aliasMatches(q) {
 
 export function cryptoBase(r) {
   if (r.type !== 'crypto') return null;
+  if (r.base) return r.base;
   if (r.src === 'binance') return splitBinance(r.sym)[0];
   return r.sym.split('-')[0];
 }

@@ -2,7 +2,7 @@ import { store, DEFAULT_INDICATORS } from './store.js';
 import { $, h, uid, toast, download, pickFile, isTyping, fmtPrice, fmtPct, autoPrecision } from './util.js';
 import { ICONS } from './icons.js';
 import { resolve } from './symbols.js';
-import { INTERVALS, QUICK_RANGE, loadBars, loadOlder, subscribeBars, QuoteFeed, quotes, qkey } from './data.js';
+import { INTERVALS, QUICK_RANGE, loadBars, loadOlder, subscribeBars, QuoteFeed, getQuote } from './data.js';
 import { ChartView, CHART_TYPES } from './chart.js';
 import { TOOLS } from './drawings.js';
 import { INDICATORS } from './indicators.js';
@@ -42,7 +42,7 @@ async function loadChart() {
   setFeedStatus(res, 'loading');
   const slow = setTimeout(() => { if (seq === loadSeq) showMsg('<div class="spinner"></div>Loading…'); }, 350);
   try {
-    const quick = res.src === 'yahoo' ? QUICK_RANGE[iv] : null;
+    const quick = res.src !== 'binance' ? QUICK_RANGE[iv] : null;
     const data = await loadBars(res, iv, quick ? { range: quick } : {});
     if (seq !== loadSeq) return;
     if (!data.bars.length) throw new Error('No data for this symbol / timeframe');
@@ -119,7 +119,7 @@ function refreshFeed() {
 
 function updateTitle() {
   const r = resolve(s().symbol);
-  const q = quotes.get(qkey(r));
+  const q = getQuote(r);
   const last = cv.bars[cv.bars.length - 1];
   const price = q?.price ?? last?.close;
   document.title = price != null
@@ -131,7 +131,7 @@ function setFeedStatus(res, state) {
   const el = $('#feed-status');
   const live = res.src === 'binance';
   const label = state === 'loading' ? 'Loading…' : state === 'error' ? 'Data error' : state === 'history' ? 'Loading history…'
-    : live ? 'Binance · live' : `Yahoo · refresh ${s().settings.refreshSec}s`;
+    : live ? 'Binance · live' : `${res.src === 'synthetic' ? 'Calculated' : 'Yahoo'} · refresh ${s().settings.refreshSec}s`;
   el.className = `feed ${state === 'ok' ? (live ? 'live' : 'delayed') : state}`;
   el.textContent = label;
   el.title = live ? 'Real-time via Binance websocket' : 'Yahoo Finance via CORS proxy. Exchange data may be delayed (typically 15 min for stocks).';
@@ -414,9 +414,10 @@ function openHelp() {
     h('h4', {}, 'Symbols'),
     h('p', { class: 'muted small', html:
       '<b>BTCUSDT, ETHUSDT…</b> or <b>BINANCE:XXX</b> use Binance (real-time).<br>' +
-      '<b>BTCUSD, ETHBTC, BTCSGD</b> use Yahoo crypto (longer history).<br>' +
+      '<b>BTCUSD, ETHBTC, BTCEUR</b> use Yahoo crypto (longer history).<br>' +
       '<b>SPX, NDX, DJI, HSI, NI225, KOSPI, STI, 000300, DXY, US10Y</b> are index aliases.<br>' +
       '<b>ES1!, NQ1!, GC1!</b> are continuous futures; <b>XAUUSD, SILVER, USOIL</b> commodities.<br>' +
+      '<b>BTCSGD, BTCMYR…</b> are calculated (BTCUSD × USDSGD). Make your own: <b>BTCUSD/XAUUSD</b>, <b>ETHUSDT*USDSGD</b>.<br>' +
       '<b>USDSGD, EURUSD…</b> FX pairs. Any Yahoo ticker works too: <b>AAPL, D05.SI, 0700.HK, 7203.T</b>.<br>' +
       'TradingView exports (<b>EXCHANGE:SYMBOL</b>, <b>###Section</b>) can be uploaded as lists.' }),
     h('h4', {}, 'Drawings'),

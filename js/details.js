@@ -1,6 +1,6 @@
 // Symbol details panel (below the watchlist)
 import { h, fmtPrice, fmtSigned, fmtPct, fmtVol, autoPrecision, upDownClass } from './util.js';
-import { quotes, qkey, loadBars } from './data.js';
+import { getQuote, loadBars } from './data.js';
 import { avatar } from './dialogs.js';
 
 const PERF = [['1W', 7], ['1M', 30], ['3M', 91], ['6M', 182], ['YTD', 'ytd'], ['1Y', 365]];
@@ -44,7 +44,7 @@ export class Details {
   render() {
     const r = this.res;
     if (!r) return;
-    const q = quotes.get(qkey(r)) || {};
+    const q = getQuote(r) || {};
     const p = q.precision ?? this.meta.precision ?? (q.price ? autoPrecision(q.price) : 2);
     const name = q.name || this.meta.name || r.desc || r.sym;
     const exch = [q.exchange || this.meta.exchange || r.exchange, (q.type || r.type || '').replace('cryptocurrency', 'crypto')].filter(Boolean).join(' · ');

@@ -2,7 +2,7 @@ import { store } from './store.js';
 import { h, uid, fmtPrice, fmtPct, fmtSigned, autoPrecision, upDownClass, toast, download, pickFile } from './util.js';
 import { ICONS } from './icons.js';
 import { resolve } from './symbols.js';
-import { quotes, qkey } from './data.js';
+import { getQuote, leaves } from './data.js';
 import { menu, modal, prompt, confirm, symbolSearch, avatar } from './dialogs.js';
 
 const isSection = s => s.startsWith('###');
@@ -79,7 +79,7 @@ export class Watchlist {
       const val = x => {
         const r = res(x.item);
         if (col === 'sym') return r.display;
-        const q = quotes.get(qkey(r));
+        const q = getQuote(r);
         return col === 'last' ? q?.price : col === 'chg' ? q?.change : q?.pct;
       };
       for (const g of groups) {
@@ -181,8 +181,8 @@ export class Watchlist {
   updateQuotes(onlyBinance) {
     for (const [key, row] of this.rows) {
       const r = res(key);
-      if (onlyBinance && !(r.src === 'binance' && onlyBinance.has(r.sym))) continue;
-      const q = quotes.get(qkey(r));
+      if (onlyBinance && !leaves(r).some(l => l.src === 'binance' && onlyBinance.has(l.sym))) continue;
+      const q = getQuote(r);
       if (!q) continue;
       const last = row.children[2], chg = row.children[3], pct = row.children[4];
       if (q.missing) { last.textContent = 'n/a'; last.title = 'No quote data for this symbol'; continue; }

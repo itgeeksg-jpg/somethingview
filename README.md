@@ -25,6 +25,7 @@ watchlists you can create on the fly. It's a static site (no build step, no back
 | Symbols | Source | Notes |
 |---|---|---|
 | `BTCUSDT`, `ETHUSDT`, `BINANCE:XXX` | Binance public API and websocket | Real-time, no key |
+| Calculated: `BTCSGD`, `BTCMYR` (= BTCUSD × USDxxx) or any `A*B` / `A/B`, e.g. `BTCUSD/XAUUSD` | Combined from both legs | Like TradingView spreads |
 | Stocks (`AAPL`, `D05.SI`, `0700.HK`), indices (`SPX`, `NDX`, `HSI`, `STI`…), FX (`USDSGD`), futures (`ES1!`), commodities (`XAUUSD`), crypto USD pairs (`BTCUSD`) | Yahoo Finance | Needs a CORS proxy (see below) |
 
 ### Yahoo proxy

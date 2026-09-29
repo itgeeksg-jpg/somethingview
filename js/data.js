@@ -2,7 +2,7 @@
 //  - Binance (public REST + websocket, CORS-enabled, real-time) for BINANCE:/USDT pairs
 //  - Yahoo Finance (via a CORS proxy) for everything else: stocks, indices, FX, futures, crypto USD pairs
 import { store } from './store.js';
-import { withTimeout } from './util.js';
+import { withTimeout, autoPrecision } from './util.js';
 import { resolve, aliasMatches, splitBinance } from './symbols.js';
 
 export const INTERVALS = {
@@ -258,6 +258,33 @@ async function binanceSymbols() {
   return bnSymbols;
 }
 
+// ---------------------------------------------------------------- Calculated symbols (A*B, A/B)
+const opFn = op => (op === '*' ? (x, y) => x * y : (x, y) => x / y);
+const flat = b => ({ ...b, open: b.close, high: b.close, low: b.close });
+
+function combineBar(a, b, op) {
+  const f = opFn(op);
+  const o = f(a.open, b.open), c = f(a.close, b.close);
+  const hi = op === '*' ? a.high * b.high : a.high / b.low;
+  const lo = op === '*' ? a.low * b.low : a.low / b.high;
+  return { time: a.time, open: o, high: Math.max(hi, o, c), low: Math.min(lo, o, c), close: c, volume: a.volume };
+}
+
+// Leg B is carried forward onto leg A's timeline (e.g. FX is shut at weekends while crypto trades)
+function combineSeries(A, B, op) {
+  const out = [];
+  let j = -1;
+  for (const a of A) {
+    while (j + 1 < B.length && B[j + 1].time <= a.time) j++;
+    if (j < 0) continue;
+    out.push(combineBar(a, B[j].time === a.time ? B[j] : flat(B[j]), op));
+  }
+  return out;
+}
+
+// All real (non-calculated) symbols a resolved symbol depends on
+export const leaves = r => (r.src === 'synthetic' ? r.legs.flatMap(leaves) : [r]);
+
 // ---------------------------------------------------------------- Public API
 const barCache = new Map();
 
@@ -265,9 +292,17 @@ export async function loadBars(res, iv, { range } = {}) {
   const ck = `${res.src}:${res.sym}|${iv}|${range || ''}`;
   const c = barCache.get(ck);
   if (c && Date.now() - c.at < 30000) return c.data;
-  const data = res.src === 'binance'
-    ? await binanceBars(res.sym, iv, range ? { pages: 1 } : {})
-    : await yahooBars(res.sym, iv, range);
+  let data;
+  if (res.src === 'synthetic') {
+    const [A, B] = await Promise.all(res.legs.map(l => loadBars(l, iv, { range })));
+    const bars = combineSeries(A.bars, B.bars, res.op);
+    data = { bars, meta: { name: res.desc, exchange: 'Calculated', currency: '', type: res.type,
+      precision: bars.length ? autoPrecision(bars[bars.length - 1].close) : 2 } };
+  } else if (res.src === 'binance') {
+    data = await binanceBars(res.sym, iv, range ? { pages: 1 } : {});
+  } else {
+    data = await yahooBars(res.sym, iv, range);
+  }
   barCache.set(ck, { at: Date.now(), data });
   return data;
 }
@@ -296,6 +331,15 @@ function reconnectingSocket(buildUrl, onMessage) {
 
 // Live bar updates. Returns an unsubscribe function.
 export function subscribeBars(res, iv, onBar) {
+  if (res.src === 'synthetic') {
+    let la = null, lb = null;
+    const emit = () => { if (la && lb) onBar(combineBar(la, lb.time === la.time ? lb : flat(lb), res.op)); };
+    const stops = [
+      subscribeBars(res.legs[0], iv, bar => { la = bar; emit(); }),
+      subscribeBars(res.legs[1], iv, bar => { if (!lb || bar.time >= lb.time) lb = bar; emit(); }),
+    ];
+    return () => stops.forEach(f => f());
+  }
   if (res.src === 'binance') {
     const stream = `${res.sym.toLowerCase()}@kline_${INTERVALS[iv].bn}`;
     return reconnectingSocket(host => `${host}/ws/${stream}`, m => {
@@ -319,6 +363,22 @@ export function subscribeBars(res, iv, onBar) {
 // ---------------------------------------------------------------- Quotes
 export const quotes = new Map(); // qkey -> quote
 export const qkey = r => `${r.src}:${r.sym}`;
+
+export function getQuote(r) {
+  if (r.src !== 'synthetic') return quotes.get(qkey(r));
+  const a = getQuote(r.legs[0]), b = getQuote(r.legs[1]);
+  if (!a || !b) return undefined;
+  if (a.missing || b.missing) return { missing: true };
+  const f = opFn(r.op);
+  const price = f(a.price, b.price);
+  const prev = a.prev != null && b.prev != null ? f(a.prev, b.prev) : null;
+  const change = prev != null ? price - prev : null;
+  return {
+    price, prev, change, pct: prev ? (change / prev) * 100 : null,
+    volume: a.volume, open: a.open || b.open, name: r.desc, exchange: 'Calculated', type: r.type,
+    currency: r.op === '*' ? b.currency : '', precision: autoPrecision(price),
+  };
+}
 
 function isOpen(period) {
   const now = Date.now() / 1000;
@@ -400,6 +460,7 @@ export class QuoteFeed {
   }
 
   setSymbols(resList) {
+    resList = resList.flatMap(leaves);
     const y = [...new Set(resList.filter(r => r.src === 'yahoo').map(r => r.sym))];
     const b = [...new Set(resList.filter(r => r.src === 'binance').map(r => r.sym))];
     const bChanged = b.join() !== this.binance.join();
