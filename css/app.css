@@ -213,7 +213,18 @@ body.watch-closed #watch, body.watch-closed #watch-resizer { display: none; }
 .wl-row.closed .c-sym::after { content: ' •'; color: var(--muted); font-weight: 400; }
 .wl-row .rm, .wl-section .rm { position: absolute; right: 4px; display: none; background: var(--panel-2); }
 .wl-row:hover .rm, .wl-section:hover .rm { display: inline-flex; }
-.wl-row.dragging { opacity: 0.4; }
+.wl-row.dragging, .wl-section.dragging { opacity: 0.35; }
+.grip {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 10px; display: flex; align-items: center; justify-content: center;
+  color: var(--muted); cursor: grab; opacity: 0; touch-action: none;
+}
+.grip svg { width: 12px; height: 12px; }
+.wl-row:hover .grip, .wl-section:hover .grip { opacity: 1; }
+body.wl-dragging, body.wl-dragging * { cursor: grabbing !important; user-select: none; }
+@media (hover: none) {
+  .grip { opacity: 0.8; width: 22px; }
+  .wl-row, .wl-cols, .wl-section { padding-left: 24px; }
+}
 .drop-above { box-shadow: inset 0 2px 0 var(--accent); }
 .drop-below { box-shadow: inset 0 -2px 0 var(--accent); }
 .flash-up { animation: fu 0.9s; }

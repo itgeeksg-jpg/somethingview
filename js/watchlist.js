@@ -53,7 +53,9 @@ export class Watchlist {
     const col = (key, label) => h('button', { class: `wl-col c-${key}`, onclick: () => this.toggleSort(key) }, label);
     this.cols = h('div', { class: 'wl-cols' }, col('sym', 'Symbol'), col('last', 'Last'), col('chg', 'Chg'), col('pct', 'Chg%'));
     this.body = h('div', { class: 'wl-body' });
-    this.body.addEventListener('dragover', e => e.preventDefault());
+    this.body.addEventListener('pointerdown', e => this.dragStart(e));
+    // A drag ends with a click on the row; don't treat it as selecting the symbol
+    this.body.addEventListener('click', e => { if (this.justDragged) e.stopPropagation(); }, true);
     this.el.append(this.head, this.cols, this.body);
   }
 
@@ -121,26 +123,25 @@ export class Watchlist {
       if (isSection(item)) {
         const name = sectionName(item);
         const ck = `${list.id}|${name}`;
-        const row = h('div', { class: `wl-section${this.s.collapsed[ck] ? ' collapsed' : ''}`, draggable: !this.sort,
+        const row = h('div', { class: `wl-section${this.s.collapsed[ck] ? ' collapsed' : ''}`, dataset: { idx },
           onclick: () => { this.s.collapsed[ck] = !this.s.collapsed[ck]; store.save(false); this.render(); },
           oncontextmenu: e => { e.preventDefault(); this.sectionMenu(e, idx); } },
-        h('span', { class: 'chev', html: ICONS.chevDown }), h('span', { class: 'sec-name' }, name),
+        this.grip(), h('span', { class: 'chev', html: ICONS.chevDown }), h('span', { class: 'sec-name' }, name),
         h('button', { class: 'ibtn sm rm', title: 'Section options', html: ICONS.more, onclick: e => { e.stopPropagation(); this.sectionMenu(e, idx); } }));
-        this.dnd(row, idx);
         this.body.append(row);
         continue;
       }
       const r = res(item);
-      const row = h('div', { class: `wl-row${item === current ? ' active' : ''}`, draggable: !this.sort, dataset: { key: item },
+      const row = h('div', { class: `wl-row${item === current ? ' active' : ''}`, dataset: { key: item, idx },
         onclick: () => this.onSelect(item),
         oncontextmenu: e => { e.preventDefault(); this.rowMenu(e, idx); } },
+      this.grip(),
       avatar(r, 18),
       h('span', { class: 'c-sym', title: r.desc || r.sym }, r.display),
       h('span', { class: 'c-last' }, '…'),
       h('span', { class: 'c-chg' }),
       h('span', { class: 'c-pct' }),
       h('button', { class: 'ibtn sm rm', title: 'Remove', html: ICONS.x, onclick: e => { e.stopPropagation(); this.removeAt(idx); } }));
-      this.dnd(row, idx);
       this.rows.set(item, row);
       this.body.append(row);
     }
@@ -148,33 +149,81 @@ export class Watchlist {
     this.body.querySelector('.wl-row.active')?.scrollIntoView({ block: 'nearest' });
   }
 
-  dnd(row, idx) {
-    if (this.sort) return;
-    row.addEventListener('dragstart', e => { this.dragIdx = idx; row.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(idx)); });
-    row.addEventListener('dragend', () => { row.classList.remove('dragging'); this.body.querySelectorAll('.drop-above,.drop-below').forEach(x => x.classList.remove('drop-above', 'drop-below')); });
-    row.addEventListener('dragover', e => {
-      e.preventDefault();
-      const r = row.getBoundingClientRect();
-      const below = e.clientY > r.top + r.height / 2;
-      row.classList.toggle('drop-below', below);
-      row.classList.toggle('drop-above', !below);
-    });
-    row.addEventListener('dragleave', () => row.classList.remove('drop-above', 'drop-below'));
-    row.addEventListener('drop', e => {
-      e.preventDefault();
-      const below = row.classList.contains('drop-below');
-      row.classList.remove('drop-above', 'drop-below');
-      const from = this.dragIdx;
-      if (from == null || from === idx) return;
-      const items = this.list.items;
-      const [moved] = items.splice(from, 1);
-      let to = idx + (below ? 1 : 0);
-      if (from < to) to--;
-      items.splice(to, 0, moved);
-      this.dragIdx = null;
-      this.save();
-      this.render();
-    });
+  grip() {
+    return this.sort ? null : h('span', { class: 'grip', title: 'Drag to reorder', html: ICONS.drag });
+  }
+
+  // Pointer-based reordering: mouse drags the whole row, touch drags by the grip handle
+  dragStart(e) {
+    if (this.sort || e.button !== 0) return;
+    const row = e.target.closest('.wl-row, .wl-section');
+    if (!row || e.target.closest('.rm')) return;
+    if (e.pointerType !== 'mouse' && !e.target.closest('.grip')) return;
+    const from = +row.dataset.idx;
+    const startY = e.clientY;
+    let dragging = false, target = null, scrollTimer = null, lastY = startY;
+    const clear = () => this.body.querySelectorAll('.drop-above,.drop-below').forEach(x => x.classList.remove('drop-above', 'drop-below'));
+    const locate = y => {
+      const rows = [...this.body.querySelectorAll('.wl-row, .wl-section')];
+      if (!rows.length) return null;
+      for (const r of rows) {
+        const rr = r.getBoundingClientRect();
+        if (y >= rr.top && y < rr.bottom) return { el: r, below: y > rr.top + rr.height / 2 };
+      }
+      return y < rows[0].getBoundingClientRect().top ? { el: rows[0], below: false } : { el: rows[rows.length - 1], below: true };
+    };
+    const update = () => {
+      clear();
+      target = locate(lastY);
+      if (target && target.el !== row) target.el.classList.add(target.below ? 'drop-below' : 'drop-above');
+    };
+    const move = ev => {
+      lastY = ev.clientY;
+      if (!dragging) {
+        if (Math.abs(ev.clientY - startY) < 5) return;
+        dragging = true;
+        row.classList.add('dragging');
+        document.body.classList.add('wl-dragging');
+        // Auto-scroll the list while dragging near its edges
+        scrollTimer = setInterval(() => {
+          const br = this.body.getBoundingClientRect();
+          const d = lastY < br.top + 30 ? -10 : lastY > br.bottom - 30 ? 10 : 0;
+          if (d) { this.body.scrollTop += d; update(); }
+        }, 30);
+      }
+      ev.preventDefault();
+      update();
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      if (!dragging) return;
+      clearInterval(scrollTimer);
+      clear();
+      row.classList.remove('dragging');
+      document.body.classList.remove('wl-dragging');
+      this.justDragged = true;
+      setTimeout(() => { this.justDragged = false; }, 0);
+      if (target && target.el !== row) this.moveItem(from, +target.el.dataset.idx, target.below);
+    };
+    window.addEventListener('pointermove', move, { passive: false });
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  }
+
+  // Move item `from` next to item `at`. A section header moves together with its symbols.
+  moveItem(from, at, below) {
+    const items = this.list.items;
+    let count = 1;
+    if (isSection(items[from])) while (from + count < items.length && !isSection(items[from + count])) count++;
+    let to = at + (below ? 1 : 0);
+    if (to >= from && to <= from + count) return;
+    const block = items.splice(from, count);
+    if (to > from) to -= count;
+    items.splice(to, 0, ...block);
+    this.save();
+    this.render();
   }
 
   // `onlyBinance`: optional Set of Binance symbols that changed (live ticks)
@@ -184,7 +233,7 @@ export class Watchlist {
       if (onlyBinance && !leaves(r).some(l => l.src === 'binance' && onlyBinance.has(l.sym))) continue;
       const q = getQuote(r);
       if (!q) continue;
-      const last = row.children[2], chg = row.children[3], pct = row.children[4];
+      const last = row.querySelector('.c-last'), chg = row.querySelector('.c-chg'), pct = row.querySelector('.c-pct');
       if (q.missing) { last.textContent = 'n/a'; last.title = 'No quote data for this symbol'; continue; }
       const p = q.precision ?? autoPrecision(q.price);
       const prev = this.last.get(key);
@@ -377,7 +426,10 @@ export class Watchlist {
     menu(anchor, [
       { label: `Open ${res(key).display}`, onClick: () => this.onSelect(key) },
       { label: 'Add section above', icon: 'section', onClick: () => this.addSection(idx) },
-      { label: 'Move to top', onClick: () => { this.list.items.splice(idx, 1); this.list.items.unshift(key); this.save(); this.render(); } },
+      { label: 'Move up', onClick: () => idx > 0 && this.moveItem(idx, idx - 1, false) },
+      { label: 'Move down', onClick: () => idx < this.list.items.length - 1 && this.moveItem(idx, idx + 1, true) },
+      { label: 'Move to top', onClick: () => this.moveItem(idx, 0, false) },
+      { label: 'Move to bottom', onClick: () => this.moveItem(idx, this.list.items.length - 1, true) },
       ...(others.length ? [{ sep: true }, { header: 'Add to list' }] : []),
       ...others.map(id => ({ label: this.s.lists[id].name, onClick: () => {
         const l = this.s.lists[id];
