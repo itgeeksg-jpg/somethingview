@@ -413,8 +413,17 @@ function openSyncDialog() {
   } catch { qr.textContent = 'QR code unavailable'; }
   const linkInput = h('input', { class: 'input', value: link, readonly: true, onfocus: e => e.target.select() });
   const status = h('div', { class: 'muted small sync-status' });
+  const idEl = h('b', {}, '…');
+  sync.syncId().then(id => { idEl.textContent = id; });
   sync.onStatus((st, msg) => { status.textContent = st === 'error' ? `Sync error: ${msg}` : SYNC_TEXT[st]; updateSyncDot(st, msg); });
-  const codeInput = h('input', { class: 'input', placeholder: 'Paste a sync link or code from your other device' });
+  const codeEl = h('div', { class: 'pair-code' }, '······');
+  const codeNote = h('div', { class: 'muted small' }, 'Creating pairing code…');
+  sync.createPairCode().then(({ code, expires }) => {
+    codeEl.textContent = `${code.slice(0, 3)}-${code.slice(3)}`;
+    codeNote.textContent = `Valid until ${new Date(expires).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, single use`;
+  }, e => { codeEl.textContent = '—'; codeNote.textContent = e.message; });
+  const codeInput = h('input', { class: 'input', placeholder: 'Pairing code (e.g. K7P-4QX) or sync link', autocapitalize: 'characters', autocomplete: 'off',
+    onkeydown: e => { if (e.key === 'Enter') doJoin(); } });
   const doJoin = async () => {
     if (!codeInput.value.trim()) return;
     if (!(await confirm('Link this device', 'Replace the watchlists, indicators and drawings on this device with the synced ones?', { okText: 'Link' }))) return;
@@ -425,13 +434,15 @@ function openSyncDialog() {
     } catch (e) { toast(e.message, 'error'); }
   };
   const m = modal({ title: 'Sync devices', cls: 'small', body: h('div', { class: 'sync-box' },
-    h('p', { class: 'muted small' }, 'Your watchlists, indicators and drawings sync automatically between linked devices. To link your phone, scan this code with it (or open the link on it):'),
-    qr,
+    h('p', { class: 'muted small' }, 'Watchlists, indicators and drawings sync automatically between linked devices. To link your phone, open SomethingView on it the way you normally do (e.g. its home-screen icon), tap the sync dot and enter this code:'),
+    codeEl, codeNote,
+    h('details', { class: 'qr-more' }, h('summary', {}, 'Or scan a QR code / copy the link'), qr,
     h('div', { class: 'row' }, linkInput, h('button', { class: 'btn', onclick: () => navigator.clipboard?.writeText(link).then(() => toast('Link copied', 'ok'), () => {}) }, 'Copy')),
-    h('p', { class: 'muted small' }, 'Keep this link private: anyone with it can see and change your lists.'),
+    h('p', { class: 'muted small' }, 'Keep this link private: anyone with it can see and change your lists.')),
     h('h4', {}, 'Or link this device to another one'),
     h('div', { class: 'row' }, codeInput, h('button', { class: 'btn primary', onclick: doJoin }, 'Link')),
-    status),
+    h('div', { class: 'row sync-meta' }, h('span', { class: 'muted small' }, 'Sync ID ', idEl, ' — linked devices show the same ID'), h('span', { class: 'grow' }), status),
+    h('div', { class: 'muted small' }, `App version ${appVersion || 'dev'}`)),
   footer: [h('button', { class: 'btn', onclick: () => sync.syncNow().then(() => toast('Synced', 'ok'), e => toast(e.message, 'error')) }, 'Sync now'), h('span', { class: 'grow' }), h('button', { class: 'btn primary', onclick: () => m.close() }, 'Done')],
   onClose: () => sync.onStatus(updateSyncDot) });
 }
@@ -504,8 +515,24 @@ async function handleHashImport() {
   }
 }
 
+// ------------------------------------------------------------------ updates
+// Reload into the new version when the site has been updated (e.g. a phone app left open for days)
+let appVersion = null;
+async function fetchVersion() {
+  try { return (await (await fetch(`version.json?${Date.now()}`, { cache: 'no-store' })).json()).version; } catch { return null; }
+}
+async function watchVersion() {
+  appVersion = await fetchVersion();
+  document.addEventListener('visibilitychange', async () => {
+    if (document.hidden || !appVersion) return;
+    const v = await fetchVersion();
+    if (v && v !== appVersion && !document.querySelector('.overlay')) location.reload();
+  });
+}
+
 // ------------------------------------------------------------------ boot
 async function init() {
+  watchVersion();
   // Get the latest lists from other devices before the first render (don't wait forever)
   await Promise.race([sync.start(), new Promise(r => setTimeout(r, 4000))]);
   if (!Array.isArray(s().indicators)) s().indicators = DEFAULT_INDICATORS();

@@ -437,3 +437,10 @@ kbd { background: var(--panel-2); border: 1px solid var(--border); border-radius
 .qr { width: 200px; height: 200px; margin: 6px auto 4px; background: #fff; border-radius: 8px; padding: 6px; }
 .qr svg { width: 100%; height: 100%; display: block; stroke: none; }
 .sync-status { margin-top: 12px; }
+
+.pair-code { font: 700 34px/1.2 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: 0.12em; text-align: center; color: var(--text-strong); margin: 10px 0 2px; }
+.sync-box > .muted.small { text-align: center; }
+.sync-box > p.muted.small { text-align: left; }
+.qr-more { margin-top: 14px; }
+.qr-more summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.sync-meta { margin-top: 14px; }

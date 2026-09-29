@@ -59,6 +59,10 @@
 
   <div id="modal-root"></div>
   <div id="toast-root"></div>
+  <script>
+    // Always fetch the latest version of the app (falls back to the cached copy when offline)
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  </script>
   <script src="js/lib/qrcode.js"></script>
   <script type="module" src="js/main.js"></script>
 </body>

@@ -8,7 +8,8 @@ import { debounce, withTimeout } from './util.js';
 
 // Shared across devices. Everything else (current symbol, timeframe, active list, layout) stays per device.
 const SYNCED = ['lists', 'listOrder', 'collapsed', 'drawings', 'indicators', 'indicatorDefaults', 'favIntervals'];
-const API = `${new URL(DEFAULT_PROXY).origin}/sync/`;
+const ORIGIN = new URL(DEFAULT_PROXY).origin;
+const API = `${ORIGIN}/sync/`;
 
 let lastJson = null;
 let remoteHandler = () => {};
@@ -108,11 +109,36 @@ export async function start() {
   }
 }
 
-// Link this device to another device's data (replaces this device's lists)
+// Short, human-typeable code for linking another device (valid 10 minutes, single use)
+export async function createPairCode() {
+  const res = await fetch(`${ORIGIN}/pair`, { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: syncKey() }) });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || !j.code) throw new Error(j.error || `pairing error ${res.status}`);
+  return j;
+}
+
+// Short fingerprint of the sync key, to check two devices are linked (safe to show)
+export async function syncId() {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(syncKey()));
+  return [...new Uint8Array(buf)].slice(0, 4).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+
+async function keyFrom(input) {
+  const s = String(input).trim();
+  const m = s.match(/[a-f0-9]{32}/i);
+  if (m) return m[0].toLowerCase();
+  const code = s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (code.length !== 6) throw new Error('Enter the 6-character pairing code shown on your other device');
+  const res = await fetch(`${ORIGIN}/pair/${code}`, { cache: 'no-store' });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || !j.key) throw new Error(j.error || 'Code not found or expired');
+  return j.key;
+}
+
+// Link this device to another device's data (replaces this device's lists).
+// Accepts a pairing code, a sync link or a raw key.
 export async function join(input) {
-  const m = String(input).match(/[a-f0-9]{32}/i);
-  if (!m) throw new Error('That is not a valid sync link or code');
-  const key = m[0].toLowerCase();
+  const key = await keyFrom(input);
   if (key === syncKey()) return false;
   const prev = { key: syncKey(), updated: store.s.syncUpdated };
   store.s.settings.syncKey = key;

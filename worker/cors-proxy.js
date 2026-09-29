@@ -13,7 +13,7 @@ const MAX_SYNC_BYTES = 2_000_000;
 
 const cors = {
   'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
-  'Access-Control-Allow-Methods': 'GET, PUT, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, PUT, POST, OPTIONS',
   'Access-Control-Allow-Headers': '*',
   'Access-Control-Max-Age': '86400',
 };
@@ -46,6 +46,32 @@ async function handleSync(request, env, key) {
     await env.DB.prepare('INSERT INTO state (id, data, updated) VALUES (?1, ?2, ?3) ON CONFLICT(id) DO UPDATE SET data = ?2, updated = ?3')
       .bind(id, JSON.stringify(body.data ?? {}), updated).run();
     return json({ updated });
+  }
+  return json({ error: 'method not allowed' }, 405);
+}
+
+// Short-lived pairing codes: a device with a sync key gets a code like "K7P4QX" that another
+// device can type in to receive the key (single use, 10 minutes)
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+async function handlePair(request, env, code) {
+  if (!env.DB) return json({ error: 'sync storage not configured' }, 500);
+  const now = Date.now();
+  await env.DB.prepare('DELETE FROM pair WHERE expires < ?').bind(now).run();
+  if (request.method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    if (!/^[a-f0-9]{32}$/.test(body.key || '')) return json({ error: 'bad key' }, 400);
+    const bytes = crypto.getRandomValues(new Uint8Array(6));
+    const newCode = [...bytes].map(b => CODE_CHARS[b % CODE_CHARS.length]).join('');
+    const expires = now + 10 * 60 * 1000;
+    await env.DB.prepare('INSERT OR REPLACE INTO pair (code, key, expires) VALUES (?, ?, ?)').bind(newCode, body.key, expires).run();
+    return json({ code: newCode, expires });
+  }
+  if (request.method === 'GET') {
+    code = code.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const row = await env.DB.prepare('SELECT key FROM pair WHERE code = ? AND expires >= ?').bind(code, now).first();
+    if (!row) return json({ error: 'Code not found or expired' }, 404);
+    await env.DB.prepare('DELETE FROM pair WHERE code = ?').bind(code).run();
+    return json({ key: row.key });
   }
   return json({ error: 'method not allowed' }, 405);
 }
@@ -83,6 +109,7 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors });
     const path = new URL(request.url).pathname;
     if (path.startsWith('/sync/')) return handleSync(request, env, path.slice(6));
+    if (path === '/pair' || path.startsWith('/pair/')) return handlePair(request, env, path.slice(6));
     return handleProxy(request, ctx);
   },
 };
