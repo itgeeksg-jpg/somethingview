@@ -1,8 +1,8 @@
 import {
   createChart, CandlestickSeries, BarSeries, LineSeries, AreaSeries, HistogramSeries,
-  CrosshairMode, PriceScaleMode, LineStyle,
+  CrosshairMode, PriceScaleMode, LineStyle, LineType,
 } from './lib/lightweight-charts.mjs';
-import { INDICATORS, paramsWithDefaults, legendArgs, heikinAshi } from './indicators.js';
+import { INDICATORS, paramsWithDefaults, legendArgs, heikinAshi, plotStyle, visibleOn } from './indicators.js';
 import { Drawings } from './drawings.js';
 import { INTERVALS } from './data.js';
 import { h, fmtPrice, fmtAuto, fmtVol, autoPrecision, escapeHtml } from './util.js';
@@ -249,11 +249,12 @@ export class ChartView {
     let pane = 1;
     for (const inst of this.indicators) {
       const def = INDICATORS[inst.type];
-      if (!def) continue;
+      if (!def || !visibleOn(inst, this.interval)) continue;
       const e = { inst, def, pane: def.overlay ? 0 : pane++, series: {}, priceOverlay: def.overlay && !def.volume };
       for (const plot of def.plots) {
-        const color = inst.colors?.[plot.key] || plot.color;
-        const base = { priceLineVisible: false, visible: !inst.hidden, lastValueVisible: !def.overlay || def.plots.length <= 2 };
+        const st = plotStyle(inst, plot);
+        const color = st.color;
+        const base = { priceLineVisible: false, visible: !inst.hidden && !st.hidden, lastValueVisible: !def.overlay || def.plots.length <= 2 };
         let opts;
         if (def.volume) {
           opts = { ...base, priceScaleId: 'vol', priceFormat: { type: 'volume' }, lastValueVisible: false };
@@ -265,7 +266,8 @@ export class ChartView {
         let s;
         if (plot.type === 'histogram') s = this.chart.addSeries(HistogramSeries, { ...opts, color }, e.pane);
         else if (plot.type === 'dots') s = this.chart.addSeries(LineSeries, { ...opts, color, lineVisible: false, pointMarkersVisible: true, pointMarkersRadius: 1.5, lastValueVisible: false, crosshairMarkerVisible: false }, e.pane);
-        else s = this.chart.addSeries(LineSeries, { ...opts, color, lineWidth: plot.width || 1, crosshairMarkerVisible: false }, e.pane);
+        else if (st.plotType === 'circles') s = this.chart.addSeries(LineSeries, { ...opts, color, lineVisible: false, pointMarkersVisible: true, pointMarkersRadius: 1 + st.width, crosshairMarkerVisible: false }, e.pane);
+        else s = this.chart.addSeries(LineSeries, { ...opts, color, lineWidth: st.width, lineStyle: st.lineStyle, lineType: st.plotType === 'step' ? LineType.WithSteps : LineType.Simple, crosshairMarkerVisible: false }, e.pane);
         e.series[plot.key] = s;
       }
       if (def.volume) e.series.vol.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
@@ -391,11 +393,12 @@ export class ChartView {
       if (!e.legend) continue;
       const parts = [];
       for (const plot of e.def.plots) {
-        if (plot.type === 'dots') continue;
+        const st = plotStyle(e.inst, plot);
+        if (plot.type === 'dots' || st.hidden) continue;
         const o = e.out?.[plot.key];
         const v = o?.values?.[i];
         if (v == null) continue;
-        const color = o.colors?.[i] || e.inst.colors?.[plot.key] || plot.color;
+        const color = o.colors?.[i] || st.color;
         parts.push(`<i style="color:${escapeHtml(color)}">${e.def.volume ? fmtVol(v) : e.def.overlay ? fmtPrice(v, p) : fmtAuto(v)}</i>`);
       }
       e.legend.querySelector('.lg-vals').innerHTML = parts.join('');

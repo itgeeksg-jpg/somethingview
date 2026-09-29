@@ -1,6 +1,6 @@
 import { h, $, debounce, escapeHtml, hashColor } from './util.js';
 import { ICONS } from './icons.js';
-import { INDICATORS, paramsWithDefaults } from './indicators.js';
+import { INDICATORS, paramsWithDefaults, plotStyle, LINE_STYLES, PLOT_TYPES, VIS_UNITS } from './indicators.js';
 import { searchSymbols } from './data.js';
 import { resolve, avatarText, icon } from './symbols.js';
 
@@ -191,33 +191,99 @@ export function indicatorPicker(onAdd) {
   setTimeout(() => input.focus(), 20);
 }
 
-const toHex = c => {
-  if (/^#[0-9a-f]{6}$/i.test(c)) return c;
-  const m = c.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-  return m ? '#' + [m[1], m[2], m[3]].map(x => (+x).toString(16).padStart(2, '0')).join('') : '#2962ff';
-};
-
-export function indicatorSettings(inst, onApply) {
+// TradingView-style settings: Inputs / Style / Visibility tabs.
+// onApply({ params, colors, styles, visibility }); onSaveDefault(sameShape)
+export function indicatorSettings(inst, onApply, onSaveDefault) {
   const def = INDICATORS[inst.type];
   const p = paramsWithDefaults(inst);
+
+  // ---- Inputs
   const inputs = {};
-  const colors = {};
-  const form = h('div', { class: 'form grid2' });
+  const inputsPane = h('div', { class: 'form grid2' });
   for (const x of def.params) {
     let el;
     if (x.type === 'select') el = h('select', { class: 'input' }, ...x.options.map(o => h('option', { value: o, selected: o === p[x.key] }, o)));
     else if (x.type === 'bool') el = h('input', { type: 'checkbox', checked: !!p[x.key] });
     else el = h('input', { class: 'input', type: 'number', step: x.step || 1, min: x.min ?? '', value: p[x.key] });
     inputs[x.key] = el;
-    form.append(h('label', {}, x.label), el);
+    inputsPane.append(h('label', {}, x.label), el);
   }
-  if (def.plots.length) form.append(h('div', { class: 'form-sep' }, 'Style'), h('span'));
+  if (!def.params.length) inputsPane.append(h('p', { class: 'muted' }, 'This indicator has no inputs.'));
+
+  // ---- Style
+  const styleCtl = {};
+  const stylePane = h('div', { class: 'style-grid' });
   for (const pl of def.plots) {
-    if (pl.type === 'dots' || (def.volume && pl.key === 'vol')) continue;
-    const el = h('input', { type: 'color', value: toHex(inst.colors?.[pl.key] || pl.color) });
-    colors[pl.key] = el;
-    form.append(h('label', {}, pl.label), el);
+    const st = plotStyle(inst, pl);
+    const perPointColors = pl.type === 'histogram' || pl.type === 'dots';
+    const c = {
+      show: h('input', { type: 'checkbox', checked: !st.hidden }),
+      color: h('input', { type: 'color', value: st.hex, title: 'Color' }),
+      opacity: h('input', { type: 'range', min: 0, max: 100, value: st.opacity, title: 'Opacity' }),
+      width: h('select', { class: 'input sm', title: 'Thickness' }, ...[1, 2, 3, 4].map(w => h('option', { value: w, selected: w === st.width }, `${w}px`))),
+      lineStyle: h('select', { class: 'input sm', title: 'Line style' }, ...LINE_STYLES.map(([v, l]) => h('option', { value: v, selected: v === st.lineStyle }, l))),
+      plotType: h('select', { class: 'input sm', title: 'Plot type' }, ...PLOT_TYPES.map(([v, l]) => h('option', { value: v, selected: v === st.plotType }, l))),
+      perPointColors,
+    };
+    const pct = h('span', { class: 'muted small op-val' }, `${st.opacity}%`);
+    c.opacity.addEventListener('input', () => { pct.textContent = `${c.opacity.value}%`; });
+    styleCtl[pl.key] = c;
+    stylePane.append(h('label', { class: 'check st-name' }, c.show, pl.label));
+    stylePane.append(perPointColors
+      ? h('span', { class: 'muted small st-note' }, 'colored by value')
+      : h('div', { class: 'st-ctl' }, c.color, h('span', { class: 'op' }, c.opacity, pct), c.width, c.lineStyle, c.plotType));
   }
+
+  // ---- Visibility
+  const visCtl = {};
+  const visPane = h('div', { class: 'vis-grid' });
+  for (const [unit, label, max] of VIS_UNITS) {
+    const v = inst.visibility?.[unit] || {};
+    const c = {
+      on: h('input', { type: 'checkbox', checked: v.on !== false }),
+      min: h('input', { class: 'input', type: 'number', min: 1, max, value: v.min ?? 1 }),
+      max: h('input', { class: 'input', type: 'number', min: 1, max, value: v.max ?? max }),
+      rmin: h('input', { type: 'range', min: 1, max, value: v.min ?? 1 }),
+      rmax: h('input', { type: 'range', min: 1, max, value: v.max ?? max }),
+    };
+    const clamp = x => Math.max(1, Math.min(max, parseInt(x, 10) || 1));
+    const sync = from => {
+      let lo = clamp(from === 'range' ? c.rmin.value : c.min.value), hi = clamp(from === 'range' ? c.rmax.value : c.max.value);
+      if (lo > hi) [lo, hi] = from === 'range' && document.activeElement === c.rmax ? [hi, hi] : [lo, lo];
+      c.min.value = c.rmin.value = lo;
+      c.max.value = c.rmax.value = hi;
+      const span = max - 1 || 1;
+      fill.style.left = `${((lo - 1) / span) * 100}%`;
+      fill.style.right = `${100 - ((hi - 1) / span) * 100}%`;
+      row.classList.toggle('off', !c.on.checked);
+    };
+    const fill = h('i', { class: 'dual-fill' });
+    const row = h('div', { class: 'vis-row' },
+      h('label', { class: 'check' }, c.on, label),
+      c.min,
+      h('div', { class: 'dual' }, h('span', { class: 'dual-track' }, fill), c.rmin, c.rmax),
+      c.max);
+    [c.rmin, c.rmax].forEach(r => r.addEventListener('input', () => sync('range')));
+    [c.min, c.max].forEach(r => r.addEventListener('change', () => sync('num')));
+    c.on.addEventListener('change', () => sync('num'));
+    visCtl[unit] = c;
+    visPane.append(row);
+    sync('num');
+  }
+  visPane.append(h('p', { class: 'muted small' }, 'The indicator is only drawn on timeframes that are ticked and within the range.'));
+
+  // ---- tabs
+  const panes = { Inputs: inputsPane, Style: stylePane, Visibility: visPane };
+  const tabBar = h('div', { class: 'tabs' });
+  const holder = h('div', { class: 'tab-body' });
+  const show = name => {
+    [...tabBar.children].forEach(b => b.classList.toggle('active', b.textContent === name));
+    holder.innerHTML = '';
+    holder.append(panes[name]);
+  };
+  for (const name of Object.keys(panes)) tabBar.append(h('button', { class: 'tab', onclick: () => show(name) }, name));
+  show('Inputs');
+
   const collect = () => {
     const params = {};
     for (const x of def.params) {
@@ -231,18 +297,39 @@ export function indicatorSettings(inst, onApply) {
         params[x.key] = v;
       }
     }
-    const cols = { ...(inst.colors || {}) };
-    for (const [k, el] of Object.entries(colors)) {
-      const orig = inst.colors?.[k] || def.plots.find(pl => pl.key === k).color;
-      if (el.value !== toHex(orig)) cols[k] = el.value;
+    const colors = {}, styles = {};
+    for (const pl of def.plots) {
+      const c = styleCtl[pl.key];
+      const dflt = plotStyle({}, pl);
+      const st = {};
+      if (!c.show.checked) st.hidden = true;
+      if (!c.perPointColors) {
+        if (c.color.value !== dflt.hex) colors[pl.key] = c.color.value;
+        if (+c.opacity.value !== dflt.opacity) st.opacity = +c.opacity.value;
+        if (+c.width.value !== dflt.width) st.width = +c.width.value;
+        if (+c.lineStyle.value !== 0) st.lineStyle = +c.lineStyle.value;
+        if (c.plotType.value !== 'line') st.plotType = c.plotType.value;
+      }
+      if (Object.keys(st).length) styles[pl.key] = st;
     }
-    return { params, colors: cols };
+    const visibility = {};
+    for (const [unit, , max] of VIS_UNITS) {
+      const c = visCtl[unit];
+      const v = { on: c.on.checked, min: +c.min.value, max: +c.max.value };
+      if (!v.on || v.min !== 1 || v.max !== max) visibility[unit] = v;
+    }
+    return { params, colors, styles, visibility };
   };
+
+  const dfltBtn = h('button', { class: 'btn', onclick: e => menu(e.currentTarget, [
+    { label: 'Reset settings', onClick: () => { onApply({ params: {}, colors: {}, styles: {}, visibility: {} }); m.close(); } },
+    onSaveDefault ? { label: 'Save as default', onClick: () => { onSaveDefault(collect()); } } : null,
+  ]) }, 'Defaults ', h('span', { class: 'chev', html: ICONS.chevDown }));
   const m = modal({
-    title: def.name, cls: 'small',
-    body: form,
+    title: def.short === def.name ? def.name : `${def.short} — ${def.name}`, cls: 'ind-settings',
+    body: h('div', {}, tabBar, holder),
     footer: [
-      h('button', { class: 'btn', onclick: () => { onApply({ params: {}, colors: {} }); m.close(); } }, 'Defaults'),
+      dfltBtn,
       h('span', { class: 'grow' }),
       h('button', { class: 'btn', onclick: () => m.close() }, 'Cancel'),
       h('button', { class: 'btn primary', onclick: () => { onApply(collect()); m.close(); } }, 'OK'),

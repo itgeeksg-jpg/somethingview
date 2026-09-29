@@ -195,14 +195,21 @@ function onIndicatorAction(action, inst) {
   if (action === 'remove') cv.setIndicators(list.filter(x => x !== inst));
   else if (action === 'toggle') { inst.hidden = !inst.hidden; cv.setIndicators(list); }
   else if (action === 'settings') {
-    indicatorSettings(inst, ({ params, colors }) => { inst.params = params; inst.colors = colors; cv.setIndicators(list); saveIndicators(); });
+    indicatorSettings(inst,
+      cfg => { Object.assign(inst, cfg); cv.setIndicators(list); saveIndicators(); },
+      cfg => {
+        s().indicatorDefaults = { ...(s().indicatorDefaults || {}), [inst.type]: cfg };
+        store.save();
+        toast(`Saved as default for new ${INDICATORS[inst.type].short}`, 'ok');
+      });
     return;
   }
   saveIndicators();
 }
 
 function addIndicator(type) {
-  const inst = { id: uid(), type, params: {}, colors: {}, hidden: false };
+  const saved = s().indicatorDefaults?.[type];
+  const inst = { params: {}, colors: {}, styles: {}, visibility: {}, ...(saved ? JSON.parse(JSON.stringify(saved)) : {}), id: uid(), type, hidden: false };
   cv.setIndicators([...cv.indicators, inst]);
   saveIndicators();
   toast(`Added ${INDICATORS[type].name}`, 'ok', 1500);

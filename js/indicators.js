@@ -469,3 +469,47 @@ export function legendArgs(inst) {
   const p = paramsWithDefaults(inst);
   return def.params.filter(x => x.type !== 'bool').map(x => p[x.key]).join(' ');
 }
+
+// ---------------------------------------------------------------- per-instance style & visibility
+export const LINE_STYLES = [[0, 'Solid'], [2, 'Dashed'], [1, 'Dotted'], [3, 'Large dashed']];
+export const PLOT_TYPES = [['line', 'Line'], ['step', 'Step line'], ['circles', 'Circles']];
+
+export function parseColor(c = '#2962ff') {
+  if (/^#[0-9a-f]{6}$/i.test(c)) return { hex: c.toLowerCase(), alpha: 1 };
+  const m = c.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/);
+  if (!m) return { hex: '#2962ff', alpha: 1 };
+  return { hex: '#' + [m[1], m[2], m[3]].map(x => (+x).toString(16).padStart(2, '0')).join(''), alpha: m[4] != null ? +m[4] : 1 };
+}
+
+export function rgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return a >= 1 ? hex : `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${+a.toFixed(3)})`;
+}
+
+// Resolved look of one plot of an indicator instance (user overrides on top of the defaults)
+export function plotStyle(inst, plot) {
+  const st = inst.styles?.[plot.key] || {};
+  const base = parseColor(inst.colors?.[plot.key] || plot.color);
+  const opacity = st.opacity ?? Math.round(base.alpha * 100);
+  return {
+    hex: base.hex, opacity, color: rgba(base.hex, opacity / 100),
+    width: st.width ?? plot.width ?? 1,
+    lineStyle: st.lineStyle ?? 0,
+    plotType: st.plotType ?? 'line',
+    hidden: !!st.hidden,
+  };
+}
+
+// Timeframe visibility, like TradingView's "Visibility" tab
+export const VIS_UNITS = [['minutes', 'Minutes', 59], ['hours', 'Hours', 24], ['days', 'Days', 366], ['weeks', 'Weeks', 52], ['months', 'Months', 12]];
+const UNIT_OF = { m: 'minutes', h: 'hours', D: 'days', W: 'weeks', M: 'months' };
+
+export function visibleOn(inst, interval) {
+  const m = String(interval).match(/^(\d+)([mhDWM])$/);
+  if (!m) return true;
+  const unit = UNIT_OF[m[2]], n = +m[1];
+  const v = inst.visibility?.[unit];
+  if (!v) return true;
+  const max = VIS_UNITS.find(u => u[0] === unit)[2];
+  return v.on !== false && n >= (v.min ?? 1) && n <= (v.max ?? max);
+}
