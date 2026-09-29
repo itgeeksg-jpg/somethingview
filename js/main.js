@@ -313,7 +313,7 @@ function applyTheme() {
 function openSettings() {
   const st = s().settings;
   const theme = h('select', { class: 'input' }, h('option', { value: 'dark', selected: st.theme === 'dark' }, 'Dark'), h('option', { value: 'light', selected: st.theme === 'light' }, 'Light'));
-  const proxy = h('input', { class: 'input', placeholder: 'https://your-worker.workers.dev/?url=', value: st.proxy });
+  const proxy = h('input', { class: 'input', placeholder: 'built-in: somethingview-proxy.itgeeksg.workers.dev', value: st.proxy });
   const refresh = h('input', { class: 'input', type: 'number', min: 10, value: st.refreshSec });
   const token = h('input', { class: 'input', type: 'password', placeholder: 'GitHub token with “gist” scope', value: st.gistToken, autocomplete: 'off' });
   const gistId = h('input', { class: 'input', placeholder: 'auto-detected / created', value: st.gistId });
@@ -368,7 +368,7 @@ function openSettings() {
       h('div', { class: 'form grid2' }, h('label', {}, 'Theme'), theme)),
     h('section', {},
       h('h4', {}, 'Stock / index / FX data'),
-      h('p', { class: 'muted small', html: 'Crypto <b>USDT</b> pairs stream straight from Binance. Everything else comes from Yahoo Finance, which needs a CORS proxy when opened from a browser. A free public proxy is used by default, but it is slow and sometimes down. For reliable data, deploy the included <code>worker/cors-proxy.js</code> as a free Cloudflare Worker (see README) and paste its URL here.' }),
+      h('p', { class: 'muted small', html: 'Crypto <b>USDT</b> pairs stream straight from Binance. Everything else comes from Yahoo Finance through your Cloudflare Worker proxy (built in). Leave the field empty to use it; enter a different proxy URL only if you deploy another one.' }),
       h('div', { class: 'form grid2' },
         h('label', {}, 'Proxy URL'), proxy,
         h('label', {}, 'Refresh (sec)'), refresh),

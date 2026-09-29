@@ -27,7 +27,13 @@ watchlists you can create on the fly. It's a static site (no build step, no back
 | `BTCUSDT`, `ETHUSDT`, `BINANCE:XXX` | Binance public API and websocket | Real-time, no key |
 | Stocks (`AAPL`, `D05.SI`, `0700.HK`), indices (`SPX`, `NDX`, `HSI`, `STI`…), FX (`USDSGD`), futures (`ES1!`), commodities (`XAUUSD`), crypto USD pairs (`BTCUSD`) | Yahoo Finance | Needs a CORS proxy (see below) |
 
-### Make Yahoo data reliable: deploy your own proxy (free, about 2 minutes)
+### Yahoo proxy
+
+This deployment uses its own Cloudflare Worker (`worker/`, deployed at
+`somethingview-proxy.itgeeksg.workers.dev`), which is built in as the default. To redeploy it:
+`cd worker && npx wrangler deploy`.
+
+#### Running your own copy
 
 Browsers can't call Yahoo directly. By default the app uses a free public proxy, which is slow and sometimes down.
 For reliable data:

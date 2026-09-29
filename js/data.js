@@ -82,7 +82,7 @@ function precisionFromPrices(bars) {
 
 // ---------------------------------------------------------------- Yahoo via proxy
 // Your own proxy (worker/cors-proxy.js on Cloudflare). Used on every device without any setup.
-export const DEFAULT_PROXY = '';
+export const DEFAULT_PROXY = 'https://somethingview-proxy.itgeeksg.workers.dev/?url=';
 
 const tmpl = base => u => (base.includes('{url}') ? base.replace('{url}', encodeURIComponent(u)) : base + encodeURIComponent(u));
 // Free public fallbacks: unreliable, used only when no own proxy is reachable
