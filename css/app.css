@@ -444,3 +444,26 @@ kbd { background: var(--panel-2); border: 1px solid var(--border); border-radius
 .qr-more { margin-top: 14px; }
 .qr-more summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 .sync-meta { margin-top: 14px; }
+
+/* ---------------------------------------------------------------- BTC converter */
+#calc-btn { color: #f7931a; }
+#calc-btn.active { background: var(--hover); }
+.calc-panel {
+  position: fixed; z-index: 60; width: 340px; max-width: calc(100vw - 16px); padding: 14px 16px 16px;
+  background: var(--menu-bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.calc-head { display: flex; align-items: center; justify-content: space-between; color: var(--text-strong); }
+.calc-rate { font-size: 17px; font-weight: 700; color: var(--text-strong); font-variant-numeric: tabular-nums; margin-top: 2px; }
+.calc-src { margin-top: -6px; }
+.calc-row { display: flex; gap: 6px; align-items: center; }
+.calc-row .input { flex: 1; min-width: 0; height: 40px; font-size: 16px; font-variant-numeric: tabular-nums; }
+.calc-row .input.copied { border-color: var(--up); }
+.calc-cur { flex: none !important; width: 78px; }
+.calc-unit { width: 78px; flex: none; color: var(--muted); font-size: 13px; padding-left: 4px; }
+.calc-copy { height: 40px; padding: 0 12px; color: #f7931a; }
+.calc-refresh { margin-top: 4px; height: 38px; }
+@media (max-width: 820px) {
+  #calc-btn span { display: none; }
+  .calc-panel { left: 8px; right: 8px !important; width: auto; max-width: none; }
+}

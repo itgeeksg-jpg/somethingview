@@ -10,6 +10,7 @@ import { Watchlist } from './watchlist.js';
 import { Details } from './details.js';
 import { menu, modal, prompt, confirm, symbolSearch, indicatorPicker, indicatorSettings } from './dialogs.js';
 import * as sync from './sync.js';
+import { toggleCalc } from './calc.js';
 
 const s = () => store.s;
 const isMobile = () => window.matchMedia('(max-width: 820px)').matches;
@@ -577,6 +578,8 @@ async function init() {
   $('#type-btn').onclick = e => openChartTypeMenu(e.currentTarget);
   $('#ind-btn').innerHTML = `${ICONS.indicators}<span>Indicators</span>`;
   $('#ind-btn').onclick = () => indicatorPicker(addIndicator);
+  $('#calc-btn').innerHTML = `${ICONS.bitcoin}<span>Convert</span>`;
+  $('#calc-btn').onclick = e => toggleCalc(e.currentTarget);
   $('#shot-btn').innerHTML = ICONS.camera;
   $('#shot-btn').onclick = screenshot;
   $('#full-btn').innerHTML = ICONS.fullscreen;
@@ -593,6 +596,8 @@ async function init() {
     $('#log-btn').classList.toggle('active', s().logScale);
   };
   $('#auto-btn').onclick = () => cv.autoScale();
+  cv.onAutoScaleChange = on => $('#auto-btn').classList.toggle('active', !!on);
+  $('#auto-btn').classList.add('active');
   $('#details-split').ondblclick = () => { s().ui.detailsOpen = !s().ui.detailsOpen; store.save(false); applyWatchLayout(); };
 
   renderSymbolButton();

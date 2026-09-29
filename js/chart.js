@@ -62,6 +62,8 @@ export class ChartView {
     });
     this.paneObserver = new ResizeObserver(() => this.positionLegends());
     this.paneObserver.observe(this.chartEl);
+    this.onAutoScaleChange = () => {};
+    this.setupFreeDrag();
     this.applyTheme('dark');
   }
 
@@ -286,6 +288,7 @@ export class ChartView {
     if (reset) {
       ts.applyOptions({ barSpacing: this.bars.length < 120 ? 12 : 6 });
       ts.scrollToRealTime();
+      this.autoScale(); // new symbol/timeframe: prices are in a different range
     } else if (range) {
       ts.setVisibleLogicalRange(range);
     }
@@ -304,6 +307,68 @@ export class ChartView {
 
   autoScale() {
     this.chart.panes().forEach((_, i) => this.chart.priceScale('right', i).applyOptions({ autoScale: true }));
+    this.onAutoScaleChange(true);
+  }
+
+  isAutoScale() {
+    return this.chart.priceScale('right', 0).options().autoScale;
+  }
+
+  // TradingView-style dragging: dragging the chart up/down moves it vertically too, switching the
+  // pane's price scale out of auto mode (the library only pans vertically when auto is already off).
+  setupFreeDrag() {
+    let d = null;
+    const paneAt = (x, y) => {
+      const panes = this.chart.panes();
+      for (let i = 0; i < panes.length; i++) {
+        const r = panes[i].getHTMLElement()?.getBoundingClientRect();
+        if (r && y >= r.top && y < r.bottom && x >= r.left && x < r.left + this.chart.paneSize(i).width) return { i, r };
+      }
+      return null;
+    };
+    this.chartEl.addEventListener('pointerdown', e => {
+      d = null;
+      if (e.button !== 0 || this.drawings.tool || this.drawings.drag || !this.bars.length) return;
+      const hit = paneAt(e.clientX, e.clientY);
+      if (!hit) return;
+      const ps = this.chart.priceScale('right', hit.i);
+      // Already manual: the chart library pans vertically by itself
+      if (!ps.options().autoScale) return;
+      d = { ps, pane: hit.i, y0: e.clientY, x0: e.clientX, h: hit.r.height, engaged: false };
+    }, true);
+    window.addEventListener('pointermove', e => {
+      if (!d || !e.buttons) return;
+      const dy = e.clientY - d.y0;
+      if (!d.engaged) {
+        // Mostly-horizontal drags keep auto-scale, like TradingView
+        if (Math.abs(dy) < 8 || Math.abs(dy) < Math.abs(e.clientX - d.x0) * 0.35) return;
+        const range = d.ps.getVisibleRange();
+        if (!range) { d = null; return; }
+        d.ps.applyOptions({ autoScale: false });
+        d.range = range;
+        d.y0 = e.clientY;
+        d.log = d.ps.options().mode === PriceScaleMode.Logarithmic && range.from > 0;
+        d.engaged = true;
+        if (d.pane === 0) this.onAutoScaleChange(false);
+        return;
+      }
+      const f = (e.clientY - d.y0) / d.h;
+      const { from, to } = d.range;
+      if (d.log) {
+        const lf = Math.log(from), lt = Math.log(to), sh = f * (lt - lf);
+        d.ps.setVisibleRange({ from: Math.exp(lf + sh), to: Math.exp(lt + sh) });
+      } else {
+        const sh = f * (to - from);
+        d.ps.setVisibleRange({ from: from + sh, to: to + sh });
+      }
+    });
+    const end = () => {
+      d = null;
+      // Dragging the price axis also turns auto off: keep the "auto" button in step
+      setTimeout(() => this.onAutoScaleChange(this.isAutoScale()), 0);
+    };
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
   }
 
   setVisibleDays(days) {

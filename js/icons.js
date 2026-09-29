@@ -34,6 +34,7 @@ export const ICONS = {
   fullscreen: s('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'),
   list: s('<path d="M4 5h16v15H4z"/><path d="M8 9h8M8 13h8M8 17h5"/>'),
   sync: s('<path d="M4 12a8 8 0 0114-5.3L20 9M20 12a8 8 0 01-14 5.3L4 15"/><path d="M20 4v5h-5M4 20v-5h5"/>'),
+  bitcoin: s('<circle cx="12" cy="12" r="9.5"/><path d="M9.5 7.5h3.8a2 2 0 010 4H9.5zM9.5 11.5h4.3a2 2 0 010 4H9.5zM9.5 7v9M11 6v1.5M13 6v1.5M11 16v1.5M13 16v1.5"/>'),
   help: s('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 114 2c-.9.6-1.5 1.1-1.5 2.5M12 17h.01"/>'),
   sun: s('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
   pencil: s('<path d="M4 20h4L20 8l-4-4L4 16z"/>'),

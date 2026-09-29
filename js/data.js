@@ -249,6 +249,11 @@ async function binanceBars(sym, iv, { endTime, pages } = {}) {
   };
 }
 
+export async function binancePrice(sym) {
+  const j = await binance(`/api/v3/ticker/price?symbol=${sym}`);
+  return +j.price;
+}
+
 let bnSymbols = null;
 async function binanceSymbols() {
   if (!bnSymbols) {
