@@ -50,9 +50,7 @@ function defaults() {
       proxy: '',
       refreshSec: 30,
       theme: 'dark',
-      gistToken: '',
-      gistId: '',
-      autoSync: false,
+      syncKey: '',
     },
     updated: Date.now(),
   };
@@ -95,12 +93,12 @@ export const store = {
   // The portion of state that is synced / backed up (never includes the token)
   exportData() {
     const { settings, ...rest } = this.s;
-    const { gistToken, ...safeSettings } = settings;
+    const { gistToken, syncKey, ...safeSettings } = settings;
     return { ...rest, settings: safeSettings, app: 'somethingview', version: 1 };
   },
   importData(data) {
     if (!data || data.app !== 'somethingview') throw new Error('Not a SomethingView backup');
-    const keep = { gistToken: this.s.settings.gistToken, gistId: this.s.settings.gistId, autoSync: this.s.settings.autoSync };
+    const keep = { syncKey: this.s.settings.syncKey };
     const d = defaults();
     const { app, version, ...rest } = data;
     this.s = { ...d, ...rest, ui: { ...d.ui, ...(rest.ui || {}) }, settings: { ...d.settings, ...(rest.settings || {}), ...keep } };
@@ -109,7 +107,7 @@ export const store = {
   reset() {
     const keep = this.s.settings;
     this.s = defaults();
-    this.s.settings.gistToken = keep.gistToken;
+    this.s.settings.syncKey = keep.syncKey;
     this.flush();
   },
 };

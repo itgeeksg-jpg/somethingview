@@ -1,3 +1,9 @@
 name = "somethingview-proxy"
 main = "cors-proxy.js"
 compatibility_date = "2026-09-01"
+
+# Stores synced watchlists/indicators/drawings (Cloudflare D1, free tier)
+[[d1_databases]]
+binding = "DB"
+database_name = "somethingview-sync"
+database_id = "bac370c0-0684-47f7-853b-53bc285df668"

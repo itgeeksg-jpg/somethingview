@@ -17,7 +17,7 @@ watchlists you can create on the fly. It's a static site (no build step, no back
   to add a symbol to another list. You can upload TradingView `.txt` exports, download lists, and share a list as a
   link. Prices update live.
 - **Details panel**: price, day range, 52-week range and performance (1W to 1Y).
-- **Sync across devices** through a private GitHub Gist (optional).
+- **Automatic sync across devices**: link your phone once by scanning a QR code.
 - Works on phones: add it to your home screen for an app-like view.
 
 ## Data sources
@@ -45,11 +45,13 @@ For reliable data:
 
 The worker only forwards requests to Yahoo Finance, so it isn't an open proxy.
 
-## Sync watchlists between devices
+## Sync between devices
 
-Settings → Cloud sync: create a GitHub token with **only the `gist` scope**, paste it in, and turn on auto-sync. Use
-the same token on your other devices; the app finds the sync gist on its own. The token stays in that browser's
-local storage.
+Watchlists, indicators and drawings sync automatically through the Worker (`/sync/<key>`, stored in Cloudflare D1).
+Each browser gets a random sync key. To link your phone, click the dot in the top bar (or **Sync devices** in the
+side strip) on the device that has your lists, then scan the QR code with the phone. From then on, changes on
+either device show up on the other within about 20 seconds, or straight away when you switch back to the tab.
+The current chart, timeframe and layout stay separate on each device.
 
 ## Keyboard
 

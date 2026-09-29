@@ -1,92 +1,144 @@
-// Optional cloud sync of watchlists/layout via a private GitHub Gist,
-// so the same lists show up on every device that opens the site.
+// Automatic sync of watchlists, indicators and drawings across devices, stored by the
+// SomethingView Cloudflare Worker (worker/cors-proxy.js, /sync/<key>).
+// Each device holds a random sync key; devices sharing a key share data. Link a device by
+// opening the "#sync=<key>" link (or QR code) from Settings → Sync devices.
 import { store } from './store.js';
-import { debounce, toast } from './util.js';
+import { DEFAULT_PROXY } from './data.js';
+import { debounce, withTimeout } from './util.js';
 
-const FILE = 'somethingview.json';
-const API = 'https://api.github.com';
+// Shared across devices. Everything else (current symbol, timeframe, active list, layout) stays per device.
+const SYNCED = ['lists', 'listOrder', 'collapsed', 'drawings', 'indicators', 'indicatorDefaults', 'favIntervals'];
+const API = `${new URL(DEFAULT_PROXY).origin}/sync/`;
 
-function headers() {
-  return {
-    Accept: 'application/vnd.github+json',
-    Authorization: `Bearer ${store.s.settings.gistToken.trim()}`,
-    'X-GitHub-Api-Version': '2022-11-28',
-  };
+let lastJson = null;
+let remoteHandler = () => {};
+let statusHandler = () => {};
+let lastStatus = ['idle', ''];
+
+export const onRemote = fn => { remoteHandler = fn; };
+export const onStatus = fn => { statusHandler = fn; fn(...lastStatus); };
+const setStatus = (st, msg = '') => { lastStatus = [st, msg]; statusHandler(st, msg); };
+
+export const syncKey = () => store.s.settings.syncKey || '';
+export const shareLink = () => `${location.origin}${location.pathname}#sync=${syncKey()}`;
+const newKey = () => [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
+const payload = () => Object.fromEntries(SYNCED.map(k => [k, store.s[k]]));
+
+async function req(method, body) {
+  const t = withTimeout(15000);
+  try {
+    const res = await fetch(API + syncKey(), {
+      method, cache: 'no-store', signal: t.signal,
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return { status: res.status, json: await res.json().catch(() => null) };
+  } finally {
+    t.done();
+  }
 }
 
-async function gh(path, opts = {}) {
-  const res = await fetch(API + path, { ...opts, headers: { ...headers(), ...(opts.body ? { 'Content-Type': 'application/json' } : {}) } });
-  if (!res.ok) {
-    const j = await res.json().catch(() => ({}));
-    throw new Error(`GitHub ${res.status}: ${j.message || res.statusText}`);
-  }
-  return res.json();
+function apply(data, updated) {
+  for (const k of SYNCED) if (data?.[k] !== undefined) store.s[k] = data[k];
+  if (!store.s.lists[store.s.activeList]) store.s.activeList = store.s.listOrder[0];
+  store.s.syncUpdated = updated;
+  lastJson = JSON.stringify(payload());
+  store.save(false);
+  store.flush();
+  remoteHandler();
 }
 
-export const syncEnabled = () => !!store.s.settings.gistToken.trim();
-
-// Find an existing sync gist (so a second device only needs the token)
-async function findGist() {
-  for (let page = 1; page <= 5; page++) {
-    const list = await gh(`/gists?per_page=100&page=${page}`);
-    const g = list.find(x => x.files?.[FILE]);
-    if (g) return g.id;
-    if (list.length < 100) break;
+// Returns true if newer data from another device was applied, 'missing' if nothing is stored yet
+export async function pull() {
+  if (!syncKey()) return false;
+  const r = await req('GET');
+  if (r.status === 404) return 'missing';
+  if (r.status !== 200 || !r.json) throw new Error(`sync server error ${r.status}`);
+  if ((r.json.updated || 0) > (store.s.syncUpdated || 0)) {
+    apply(r.json.data, r.json.updated);
+    return true;
   }
-  return null;
-}
-
-async function ensureGist(create) {
-  if (store.s.settings.gistId) return store.s.settings.gistId;
-  let id = await findGist();
-  if (!id && create) {
-    const g = await gh('/gists', { method: 'POST', body: JSON.stringify({ description: 'SomethingView watchlists & layout', public: false, files: { [FILE]: { content: JSON.stringify(store.exportData()) } } }) });
-    id = g.id;
-  }
-  if (id) { store.s.settings.gistId = id; store.save(false); }
-  return id;
+  return false;
 }
 
 export async function push() {
-  const id = await ensureGist(true);
-  await gh(`/gists/${id}`, { method: 'PATCH', body: JSON.stringify({ files: { [FILE]: { content: JSON.stringify(store.exportData()) } } }) });
-  lastPushed = store.s.updated;
-  return id;
+  const r = await req('PUT', { updated: store.s.syncUpdated || Date.now(), data: payload() });
+  if (r.status === 409 && r.json) { apply(r.json.data, r.json.updated); return; } // another device was newer
+  if (r.status !== 200) throw new Error(r.json?.error || `sync server error ${r.status}`);
 }
 
-// Returns true when remote data was newer and got applied
-export async function pull({ force = false } = {}) {
-  const id = await ensureGist(false);
-  if (!id) return false;
-  const g = await gh(`/gists/${id}`);
-  const f = g.files?.[FILE];
-  if (!f) return false;
-  let text = f.content;
-  if (f.truncated) text = await (await fetch(f.raw_url)).text();
-  const data = JSON.parse(text);
-  if (!force && (data.updated || 0) <= (store.s.updated || 0)) return false;
-  store.importData(data);
-  lastPushed = store.s.updated;
-  return true;
+const pushSoon = debounce(async () => {
+  setStatus('syncing');
+  try { await push(); setStatus('ok'); } catch (e) { setStatus('error', e.message); }
+}, 1500);
+
+function onChanged() {
+  const j = JSON.stringify(payload());
+  if (j === lastJson) return;
+  lastJson = j;
+  store.s.syncUpdated = Date.now();
+  store.save(false);
+  pushSoon();
 }
 
-let lastPushed = 0;
-let status = () => {};
-export function onStatus(fn) { status = fn; }
+async function pullQuietly() {
+  try { await pull(); setStatus('ok'); } catch (e) { setStatus('error', e.message); }
+}
 
-const autoPush = debounce(async () => {
-  if (!syncEnabled() || !store.s.settings.autoSync || store.s.updated === lastPushed) return;
-  status('syncing');
-  try { await push(); status('ok'); } catch (e) { status('error', e.message); }
-}, 4000);
+// Call once at startup (before the UI is built, so the first render already shows synced data)
+let started = false;
+export async function start() {
+  if (started) return;
+  started = true;
+  if (!syncKey()) { store.s.settings.syncKey = newKey(); store.save(false); }
+  lastJson = JSON.stringify(payload());
+  store.on('changed', onChanged);
+  setInterval(() => { if (!document.hidden) pullQuietly(); }, 20000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) pullQuietly(); });
+  setStatus('syncing');
+  try {
+    const r = await pull();
+    if (r === 'missing') {
+      if (!store.s.syncUpdated) store.s.syncUpdated = Date.now();
+      await push();
+    }
+    setStatus('ok');
+  } catch (e) {
+    setStatus('error', e.message);
+  }
+}
 
-export function startAutoSync() {
-  store.on('changed', autoPush);
-  // Pick up changes made on other devices when coming back to this tab
-  document.addEventListener('visibilitychange', async () => {
-    if (document.hidden || !syncEnabled() || !store.s.settings.autoSync) return;
-    try {
-      if (await pull()) { toast('Synced newer data from another device', 'ok'); location.reload(); }
-    } catch { /* offline */ }
-  });
+// Link this device to another device's data (replaces this device's lists)
+export async function join(input) {
+  const m = String(input).match(/[a-f0-9]{32}/i);
+  if (!m) throw new Error('That is not a valid sync link or code');
+  const key = m[0].toLowerCase();
+  if (key === syncKey()) return false;
+  const prev = { key: syncKey(), updated: store.s.syncUpdated };
+  store.s.settings.syncKey = key;
+  store.s.syncUpdated = 0;
+  store.save(false);
+  try {
+    const r = await pull();
+    if (r === 'missing') throw new Error('No synced data found for that code');
+    setStatus('ok');
+    return true;
+  } catch (e) {
+    store.s.settings.syncKey = prev.key;
+    store.s.syncUpdated = prev.updated;
+    store.save(false);
+    throw e;
+  }
+}
+
+export async function syncNow() {
+  setStatus('syncing');
+  try {
+    const got = await pull();
+    if (got !== true) await push();
+    setStatus('ok');
+  } catch (e) {
+    setStatus('error', e.message);
+    throw e;
+  }
 }

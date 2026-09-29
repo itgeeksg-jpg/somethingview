@@ -257,7 +257,8 @@ function renderStrip() {
   const strip = $('#strip');
   strip.append(
     h('button', { class: 'ibtn active', id: 'strip-watch', title: 'Watchlist', html: ICONS.list, onclick: toggleWatch }),
-    h('button', { class: 'ibtn', title: 'Settings & sync', html: ICONS.gear, onclick: openSettings }),
+    h('button', { class: 'ibtn', title: 'Settings', html: ICONS.gear, onclick: openSettings }),
+    h('button', { class: 'ibtn', title: 'Sync devices', html: ICONS.sync, onclick: openSyncDialog }),
     h('span', { class: 'grow' }),
     h('button', { class: 'ibtn', title: 'Help & shortcuts', html: ICONS.help, onclick: openHelp }));
 }
@@ -322,24 +323,16 @@ function openSettings() {
   const theme = h('select', { class: 'input' }, h('option', { value: 'dark', selected: st.theme === 'dark' }, 'Dark'), h('option', { value: 'light', selected: st.theme === 'light' }, 'Light'));
   const proxy = h('input', { class: 'input', placeholder: 'built-in: somethingview-proxy.itgeeksg.workers.dev', value: st.proxy });
   const refresh = h('input', { class: 'input', type: 'number', min: 10, value: st.refreshSec });
-  const token = h('input', { class: 'input', type: 'password', placeholder: 'GitHub token with “gist” scope', value: st.gistToken, autocomplete: 'off' });
-  const gistId = h('input', { class: 'input', placeholder: 'auto-detected / created', value: st.gistId });
-  const auto = h('input', { type: 'checkbox', checked: st.autoSync });
-  const syncMsg = h('div', { class: 'muted small' });
 
   const apply = () => {
     st.theme = theme.value;
     st.proxy = proxy.value.trim();
     st.refreshSec = Math.max(10, +refresh.value || 30);
-    st.gistToken = token.value.trim();
-    st.gistId = gistId.value.trim();
-    st.autoSync = auto.checked;
     store.save(false);
     applyTheme();
   };
   const testProxy = async () => {
     apply();
-    syncMsg.textContent = '';
     const out = $('.proxy-test', m.box);
     out.textContent = 'Testing…';
     try {
@@ -351,24 +344,6 @@ function openSettings() {
       out.className = 'proxy-test down';
     }
   };
-  const doSync = async dir => {
-    apply();
-    if (!st.gistToken) { syncMsg.textContent = 'Enter a token first.'; return; }
-    syncMsg.textContent = dir === 'push' ? 'Uploading…' : 'Downloading…';
-    try {
-      if (dir === 'push') {
-        const id = await sync.push();
-        gistId.value = id;
-        syncMsg.textContent = 'Uploaded to your private gist.';
-      } else {
-        const got = await sync.pull({ force: true });
-        if (got) { toast('Loaded synced data', 'ok'); setTimeout(() => location.reload(), 500); } else syncMsg.textContent = 'No synced data found yet — push first.';
-      }
-    } catch (e) {
-      syncMsg.textContent = e.message;
-    }
-  };
-
   const body = h('div', { class: 'settings' },
     h('section', {},
       h('h4', {}, 'Appearance'),
@@ -381,16 +356,9 @@ function openSettings() {
         h('label', {}, 'Refresh (sec)'), refresh),
       h('div', { class: 'row' }, h('button', { class: 'btn', onclick: testProxy }, 'Test data connection'), h('span', { class: 'proxy-test' }))),
     h('section', {},
-      h('h4', {}, 'Cloud sync (use your lists on every device)'),
-      h('p', { class: 'muted small', html: 'Stores your watchlists, indicators and drawings in a <b>private GitHub Gist</b>. Create a token at <a href="https://github.com/settings/tokens/new?scopes=gist&description=SomethingView%20sync" target="_blank" rel="noopener">github.com/settings/tokens</a> with only the <code>gist</code> scope, and enter the same token on each device. The token is kept only in this browser.' }),
-      h('div', { class: 'form grid2' },
-        h('label', {}, 'GitHub token'), token,
-        h('label', {}, 'Gist ID'), gistId,
-        h('label', {}, 'Auto-sync'), h('label', { class: 'check' }, auto, ' Upload changes automatically and pull on open')),
-      h('div', { class: 'row' },
-        h('button', { class: 'btn', onclick: () => doSync('push') }, 'Push now'),
-        h('button', { class: 'btn', onclick: () => doSync('pull') }, 'Pull now')),
-      syncMsg),
+      h('h4', {}, 'Sync across devices'),
+      h('p', { class: 'muted small' }, 'Watchlists, indicators and drawings sync automatically between your linked devices.'),
+      h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => { m.close(); openSyncDialog(); } }, 'Link another device…'))),
     h('section', {},
       h('h4', {}, 'Backup'),
       h('div', { class: 'row' },
@@ -405,7 +373,7 @@ function openSettings() {
         } }, 'Reset'))));
 
   const m = modal({ title: 'Settings', cls: 'settings-modal', body,
-    footer: [h('span', { class: 'grow' }), h('button', { class: 'btn primary', onclick: () => { apply(); m.close(); refreshFeed(); loadChart(); updateSyncDot(); } }, 'Save')] });
+    footer: [h('span', { class: 'grow' }), h('button', { class: 'btn primary', onclick: () => { apply(); m.close(); refreshFeed(); loadChart(); } }, 'Save')] });
 }
 
 function openHelp() {
@@ -432,8 +400,55 @@ function openHelp() {
   ) });
 }
 
-function updateSyncDot() {
-  $('#sync-dot').classList.toggle('hidden', !sync.syncEnabled() || !s().settings.autoSync);
+const SYNC_TEXT = { ok: 'Synced', syncing: 'Syncing…', error: 'Sync error', idle: 'Sync' };
+
+function openSyncDialog() {
+  const link = sync.shareLink();
+  const qr = h('div', { class: 'qr' });
+  try {
+    const q = window.qrcode(0, 'M');
+    q.addData(link);
+    q.make();
+    qr.innerHTML = q.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+  } catch { qr.textContent = 'QR code unavailable'; }
+  const linkInput = h('input', { class: 'input', value: link, readonly: true, onfocus: e => e.target.select() });
+  const status = h('div', { class: 'muted small sync-status' });
+  sync.onStatus((st, msg) => { status.textContent = st === 'error' ? `Sync error: ${msg}` : SYNC_TEXT[st]; updateSyncDot(st, msg); });
+  const codeInput = h('input', { class: 'input', placeholder: 'Paste a sync link or code from your other device' });
+  const doJoin = async () => {
+    if (!codeInput.value.trim()) return;
+    if (!(await confirm('Link this device', 'Replace the watchlists, indicators and drawings on this device with the synced ones?', { okText: 'Link' }))) return;
+    try {
+      await sync.join(codeInput.value);
+      toast('Linked — this device now syncs', 'ok');
+      m.close();
+    } catch (e) { toast(e.message, 'error'); }
+  };
+  const m = modal({ title: 'Sync devices', cls: 'small', body: h('div', { class: 'sync-box' },
+    h('p', { class: 'muted small' }, 'Your watchlists, indicators and drawings sync automatically between linked devices. To link your phone, scan this code with it (or open the link on it):'),
+    qr,
+    h('div', { class: 'row' }, linkInput, h('button', { class: 'btn', onclick: () => navigator.clipboard?.writeText(link).then(() => toast('Link copied', 'ok'), () => {}) }, 'Copy')),
+    h('p', { class: 'muted small' }, 'Keep this link private: anyone with it can see and change your lists.'),
+    h('h4', {}, 'Or link this device to another one'),
+    h('div', { class: 'row' }, codeInput, h('button', { class: 'btn primary', onclick: doJoin }, 'Link')),
+    status),
+  footer: [h('button', { class: 'btn', onclick: () => sync.syncNow().then(() => toast('Synced', 'ok'), e => toast(e.message, 'error')) }, 'Sync now'), h('span', { class: 'grow' }), h('button', { class: 'btn primary', onclick: () => m.close() }, 'Done')],
+  onClose: () => sync.onStatus(updateSyncDot) });
+}
+
+function updateSyncDot(st = 'idle', msg = '') {
+  const dot = $('#sync-dot');
+  dot.className = `sync-${st}`;
+  dot.title = st === 'error' ? `Sync error: ${msg}` : `${SYNC_TEXT[st]} — click to link devices`;
+}
+
+// Another device changed lists / indicators / drawings: redraw everything that depends on them
+function onRemoteSync() {
+  wl.render();
+  refreshFeed();
+  renderIntervals();
+  cv.setIndicators(s().indicators.filter(x => INDICATORS[x.type]));
+  cv.drawings.setItems(s().drawings[resolve(s().symbol).key] || []);
 }
 
 // ------------------------------------------------------------------ keyboard
@@ -464,6 +479,15 @@ function openSymbolSearch(initial = '') {
 
 // ------------------------------------------------------------------ list import via share link
 async function handleHashImport() {
+  const js = location.hash.match(/^#sync=([a-f0-9]{32})$/i);
+  if (js) {
+    history.replaceState(null, '', location.pathname + location.search);
+    if (js[1].toLowerCase() === sync.syncKey()) return;
+    if (await confirm('Link this device', 'Sync this device with your other device? Its watchlists, indicators and drawings will replace the ones here.', { okText: 'Link' })) {
+      try { await sync.join(js[1]); toast('Linked — this device now syncs', 'ok'); } catch (e) { toast(e.message, 'error'); }
+    }
+    return;
+  }
   const m = location.hash.match(/^#list=(.+)$/);
   if (!m) return;
   history.replaceState(null, '', location.pathname + location.search);
@@ -482,11 +506,8 @@ async function handleHashImport() {
 
 // ------------------------------------------------------------------ boot
 async function init() {
-  if (sync.syncEnabled() && s().settings.autoSync) {
-    try {
-      await Promise.race([sync.pull(), new Promise(r => setTimeout(r, 5000))]);
-    } catch (e) { console.warn('sync pull failed', e); }
-  }
+  // Get the latest lists from other devices before the first render (don't wait forever)
+  await Promise.race([sync.start(), new Promise(r => setTimeout(r, 4000))]);
   if (!Array.isArray(s().indicators)) s().indicators = DEFAULT_INDICATORS();
   // FiBB changed from VWMA±StdDev (length/source/mult) to SMA±ratio×ATR (Len + 3 ratios): drop old-style settings
   const oldFibb = x => x && x.params && ('mult' in x.params || 'source' in x.params);
@@ -515,6 +536,7 @@ async function init() {
     getCurrent: () => s().symbol,
   });
   feed = new QuoteFeed(sym => { wl.updateQuotes(sym); details.render(); updateTitle(); });
+  sync.onRemote(onRemoteSync);
 
   // toolbar
   $('#tools-toggle').innerHTML = ICONS.pencilRuler;
@@ -554,7 +576,8 @@ async function init() {
   applyWatchLayout();
   setupResizers();
   setupKeys();
-  updateSyncDot();
+  sync.onStatus(updateSyncDot);
+  $('#sync-dot').onclick = openSyncDialog;
 
   const clock = () => {
     const d = new Date();
@@ -569,13 +592,9 @@ async function init() {
   refreshFeed();
   await loadChart();
 
-  sync.onStatus((st, msg) => {
-    const dot = $('#sync-dot');
-    dot.className = `sync-${st}`;
-    dot.title = st === 'error' ? `Sync failed: ${msg}` : st === 'syncing' ? 'Syncing…' : 'Synced to GitHub Gist';
-  });
-  sync.startAutoSync();
   handleHashImport();
+  // Sync / share links opened while the app is already open in this tab
+  window.addEventListener('hashchange', handleHashImport);
 }
 
 init();
