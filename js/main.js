@@ -488,6 +488,10 @@ async function init() {
     } catch (e) { console.warn('sync pull failed', e); }
   }
   if (!Array.isArray(s().indicators)) s().indicators = DEFAULT_INDICATORS();
+  // FiBB changed from VWMA±StdDev (length/source/mult) to SMA±ratio×ATR (Len + 3 ratios): drop old-style settings
+  const oldFibb = x => x && x.params && ('mult' in x.params || 'source' in x.params);
+  for (const inst of s().indicators) if (inst.type === 'FIBB' && oldFibb(inst)) Object.assign(inst, { params: {}, colors: {}, styles: {} });
+  if (oldFibb(s().indicatorDefaults?.FIBB)) delete s().indicatorDefaults.FIBB;
 
   cv = new ChartView($('#chart-wrap'));
   cv.chartType = s().chartType;

@@ -219,7 +219,32 @@ export const INDICATORS = {
     },
   },
   FIBB: {
+    // Matches the TradingView "FiBB" with inputs Len / Fibonacci Ratio 1-3: SMA(close) ± ratio × ATR
     name: 'Fibonacci Bollinger Bands', short: 'FiBB', overlay: true,
+    params: [
+      { key: 'length', label: 'Len', type: 'int', def: 20, min: 1 },
+      { key: 'r1', label: 'Fibonacci Ratio 1', type: 'float', def: 1.618, step: 0.001 },
+      { key: 'r2', label: 'Fibonacci Ratio 2', type: 'float', def: 2.618, step: 0.001 },
+      { key: 'r3', label: 'Fibonacci Ratio 3', type: 'float', def: 4.236, step: 0.001 },
+    ],
+    plots: [
+      { key: 'u3', label: 'Upper 3', type: 'line', color: '#f23645', width: 1 },
+      { key: 'u2', label: 'Upper 2', type: 'line', color: 'rgba(0,188,212,0.8)', width: 1 },
+      { key: 'u1', label: 'Upper 1', type: 'line', color: 'rgba(0,188,212,0.8)', width: 1 },
+      { key: 'l1', label: 'Lower 1', type: 'line', color: 'rgba(0,188,212,0.8)', width: 1 },
+      { key: 'l2', label: 'Lower 2', type: 'line', color: 'rgba(0,188,212,0.8)', width: 1 },
+      { key: 'l3', label: 'Lower 3', type: 'line', color: '#089981', width: 1 },
+      { key: 'basis', label: 'Basis', type: 'line', color: '#e040fb', width: 2 },
+    ],
+    calc(bars, p) {
+      const basis = sma(source(bars), p.length);
+      const atr = rma(trueRange(bars), p.length);
+      const band = (r, sign) => zip(basis, atr, (b, a) => b + sign * r * a);
+      return { u3: band(p.r3, 1), u2: band(p.r2, 1), u1: band(p.r1, 1), l1: band(p.r1, -1), l2: band(p.r2, -1), l3: band(p.r3, -1), basis };
+    },
+  },
+  FIBB_VWMA: {
+    name: 'Fibonacci Bollinger Bands (VWMA / StdDev)', short: 'FiBB-V', overlay: true,
     params: [len(200), { ...SRC, def: 'hlc3' }, { key: 'mult', label: 'Multiplier', type: 'float', def: 3, step: 0.1 }],
     plots: [
       { key: 'basis', label: 'Basis', type: 'line', color: '#e040fb', width: 2 },
