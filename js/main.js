@@ -259,7 +259,7 @@ function renderStrip() {
   strip.append(
     h('button', { class: 'ibtn active', id: 'strip-watch', title: 'Watchlist', html: ICONS.list, onclick: toggleWatch }),
     h('button', { class: 'ibtn', title: 'Settings', html: ICONS.gear, onclick: openSettings }),
-    h('button', { class: 'ibtn', title: 'Sync devices', html: ICONS.sync, onclick: openSyncDialog }),
+    h('button', { class: 'ibtn', title: 'Sync', html: ICONS.sync, onclick: openSyncDialog }),
     h('span', { class: 'grow' }),
     h('button', { class: 'ibtn', title: 'Help & shortcuts', html: ICONS.help, onclick: openHelp }));
 }
@@ -358,8 +358,8 @@ function openSettings() {
       h('div', { class: 'row' }, h('button', { class: 'btn', onclick: testProxy }, 'Test data connection'), h('span', { class: 'proxy-test' }))),
     h('section', {},
       h('h4', {}, 'Sync across devices'),
-      h('p', { class: 'muted small' }, 'Watchlists, indicators and drawings sync automatically between your linked devices.'),
-      h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => { m.close(); openSyncDialog(); } }, 'Link another device…'))),
+      h('p', { class: 'muted small' }, 'Watchlists, indicators, drawings and chart layout sync automatically to every device signed in with this login.'),
+      h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => { m.close(); openSyncDialog(); } }, 'Sync status…'))),
     h('section', {},
       h('h4', {}, 'Backup'),
       h('div', { class: 'row' },
@@ -405,46 +405,19 @@ function openHelp() {
 const SYNC_TEXT = { ok: 'Synced', syncing: 'Syncing…', error: 'Sync error', idle: 'Sync' };
 
 function openSyncDialog() {
-  const link = sync.shareLink();
-  const qr = h('div', { class: 'qr' });
-  try {
-    const q = window.qrcode(0, 'M');
-    q.addData(link);
-    q.make();
-    qr.innerHTML = q.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
-  } catch { qr.textContent = 'QR code unavailable'; }
-  const linkInput = h('input', { class: 'input', value: link, readonly: true, onfocus: e => e.target.select() });
-  const status = h('div', { class: 'muted small sync-status' });
-  const idEl = h('b', {}, '…');
-  sync.syncId().then(id => { idEl.textContent = id; });
-  sync.onStatus((st, msg) => { status.textContent = st === 'error' ? `Sync error: ${msg}` : SYNC_TEXT[st]; updateSyncDot(st, msg); });
-  const codeEl = h('div', { class: 'pair-code' }, '······');
-  const codeNote = h('div', { class: 'muted small' }, 'Creating pairing code…');
-  sync.createPairCode().then(({ code, expires }) => {
-    codeEl.textContent = `${code.slice(0, 3)}-${code.slice(3)}`;
-    codeNote.textContent = `Valid until ${new Date(expires).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, single use`;
-  }, e => { codeEl.textContent = '—'; codeNote.textContent = e.message; });
-  const codeInput = h('input', { class: 'input', placeholder: 'Pairing code (e.g. K7P-4QX) or sync link', autocapitalize: 'characters', autocomplete: 'off',
-    onkeydown: e => { if (e.key === 'Enter') doJoin(); } });
-  const doJoin = async () => {
-    if (!codeInput.value.trim()) return;
-    if (!(await confirm('Link this device', 'Replace the watchlists, indicators and drawings on this device with the synced ones?', { okText: 'Link' }))) return;
-    try {
-      await sync.join(codeInput.value);
-      toast('Linked — this device now syncs', 'ok');
-      m.close();
-    } catch (e) { toast(e.message, 'error'); }
+  const status = h('div', { class: 'sync-state' });
+  const render = (st, msg) => {
+    const when = sync.lastSynced();
+    status.className = `sync-state sync-${st}`;
+    status.textContent = st === 'error' ? `Sync error: ${msg}` : st === 'syncing' ? 'Syncing…'
+      : `Synced${when ? ` at ${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : ''}`;
+    updateSyncDot(st, msg);
   };
-  const m = modal({ title: 'Sync devices', cls: 'small', body: h('div', { class: 'sync-box' },
-    h('p', { class: 'muted small' }, 'Watchlists, indicators and drawings sync automatically between linked devices. To link your phone, open SomethingView on it the way you normally do (e.g. its home-screen icon), tap the sync dot and enter this code:'),
-    codeEl, codeNote,
-    h('details', { class: 'qr-more' }, h('summary', {}, 'Or scan a QR code / copy the link'), qr,
-    h('div', { class: 'row' }, linkInput, h('button', { class: 'btn', onclick: () => navigator.clipboard?.writeText(link).then(() => toast('Link copied', 'ok'), () => {}) }, 'Copy')),
-    h('p', { class: 'muted small' }, 'Keep this link private: anyone with it can see and change your lists.')),
-    h('h4', {}, 'Or link this device to another one'),
-    h('div', { class: 'row' }, codeInput, h('button', { class: 'btn primary', onclick: doJoin }, 'Link')),
-    h('div', { class: 'row sync-meta' }, h('span', { class: 'muted small' }, 'Sync ID ', idEl, ' — linked devices show the same ID'), h('span', { class: 'grow' }), status),
-    h('div', { class: 'muted small' }, `App version ${appVersion || 'dev'}`)),
+  sync.onStatus(render);
+  const m = modal({ title: 'Sync', cls: 'small', body: h('div', { class: 'sync-box' },
+    status,
+    h('p', { class: 'muted small' }, 'Every device you sign in on with this login shares the same watchlists, indicators, drawings and chart layout. There is nothing to pair: just sign in.'),
+    h('p', { class: 'muted small' }, 'Changes appear on your other devices within about 20 seconds, or straight away when you switch back to the app.')),
   footer: [h('button', { class: 'btn', onclick: () => sync.syncNow().then(() => toast('Synced', 'ok'), e => toast(e.message, 'error')) }, 'Sync now'), h('span', { class: 'grow' }), h('button', { class: 'btn primary', onclick: () => m.close() }, 'Done')],
   onClose: () => sync.onStatus(updateSyncDot) });
 }
@@ -452,16 +425,23 @@ function openSyncDialog() {
 function updateSyncDot(st = 'idle', msg = '') {
   const dot = $('#sync-dot');
   dot.className = `sync-${st}`;
-  dot.title = st === 'error' ? `Sync error: ${msg}` : `${SYNC_TEXT[st]} — click to link devices`;
+  dot.title = st === 'error' ? `Sync error: ${msg}` : SYNC_TEXT[st];
 }
 
-// Another device changed lists / indicators / drawings: redraw everything that depends on them
+// Another device changed lists / indicators / drawings / layout: redraw everything that depends on them
 function onRemoteSync() {
   wl.render();
   refreshFeed();
   renderIntervals();
+  renderSymbolButton();
+  if (cv.logScale !== !!s().logScale) {
+    cv.setLogScale(!!s().logScale);
+    $('#log-btn').classList.toggle('active', !!s().logScale);
+  }
+  if (cv.chartType !== s().chartType) { cv.chartType = s().chartType; renderChartTypeButton(); }
   cv.setIndicators(s().indicators.filter(x => INDICATORS[x.type]));
-  cv.drawings.setItems(s().drawings[resolve(s().symbol).key] || []);
+  if (!ctx || ctx.res.key !== resolve(s().symbol).key || ctx.iv !== s().interval) loadChart();
+  else cv.drawings.setItems(s().drawings[resolve(s().symbol).key] || []);
 }
 
 // ------------------------------------------------------------------ keyboard
@@ -492,15 +472,8 @@ function openSymbolSearch(initial = '') {
 
 // ------------------------------------------------------------------ list import via share link
 async function handleHashImport() {
-  const js = location.hash.match(/^#sync=([a-f0-9]{32})$/i);
-  if (js) {
-    history.replaceState(null, '', location.pathname + location.search);
-    if (js[1].toLowerCase() === sync.syncKey()) return;
-    if (await confirm('Link this device', 'Sync this device with your other device? Its watchlists, indicators and drawings will replace the ones here.', { okText: 'Link' })) {
-      try { await sync.join(js[1]); toast('Linked — this device now syncs', 'ok'); } catch (e) { toast(e.message, 'error'); }
-    }
-    return;
-  }
+  // Old device-pairing links: sync is automatic per login now
+  if (/^#sync=/.test(location.hash)) { history.replaceState(null, '', location.pathname + location.search); return; }
   const m = location.hash.match(/^#list=(.+)$/);
   if (!m) return;
   history.replaceState(null, '', location.pathname + location.search);

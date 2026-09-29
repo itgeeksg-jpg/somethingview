@@ -467,3 +467,9 @@ kbd { background: var(--panel-2); border: 1px solid var(--border); border-radius
   #calc-btn span { display: none; }
   .calc-panel { left: 8px; right: 8px !important; width: auto; max-width: none; }
 }
+
+.sync-state { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; margin: 4px 0 12px; color: var(--text-strong); }
+.sync-state::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.sync-state.sync-ok::before { background: var(--up); }
+.sync-state.sync-syncing::before { background: #f7c948; }
+.sync-state.sync-error::before { background: var(--down); }

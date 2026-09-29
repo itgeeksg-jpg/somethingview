@@ -2,8 +2,7 @@
 //   /login          sign-in page; a successful login sets a signed cookie valid for a year
 //   /*              the app's static files (only when signed in)
 //   /api/yahoo      proxies Yahoo Finance (Yahoo has no CORS)
-//   /api/sync/<key> stores watchlists/indicators/drawings so every device stays in sync
-//   /api/pair       short pairing codes for linking another device
+//   /api/sync/me    the signed-in account's watchlists/indicators/drawings/layout, shared by all its devices
 //
 // Secrets (set with `npx wrangler secret put NAME`, never committed): AUTH_USER, AUTH_PASS, SESSION_SECRET
 
@@ -103,8 +102,12 @@ async function handleLogin(request, env) {
 
 // ---------------------------------------------------------------- sync
 async function handleSync(request, env, key) {
-  if (!/^[a-f0-9]{32}$/.test(key)) return json({ error: 'bad key' }, 400);
-  const id = await sha256(key);
+  // "me" = the signed-in account: every device logged in as the same user shares one copy.
+  // (Random device keys from the earlier pairing scheme still work.)
+  let id;
+  if (key === 'me') id = `account:${env.AUTH_USER.toLowerCase()}`;
+  else if (/^[a-f0-9]{32}$/.test(key)) id = await sha256(key);
+  else return json({ error: 'bad key' }, 400);
   const row = await env.DB.prepare('SELECT data, updated FROM state WHERE id = ?').bind(id).first();
   if (request.method === 'GET') {
     if (!row) return json({ error: 'not found' }, 404);

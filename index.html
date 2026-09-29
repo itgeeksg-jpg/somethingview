@@ -64,7 +64,6 @@
     // The server marks every file no-cache, so no service worker is needed; remove any old one
     navigator.serviceWorker?.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(() => {});
   </script>
-  <script src="js/lib/qrcode.js"></script>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

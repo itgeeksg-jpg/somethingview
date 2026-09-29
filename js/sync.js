@@ -1,34 +1,39 @@
-// Automatic sync of watchlists, indicators and drawings across devices, stored by the
-// SomethingView Cloudflare Worker (worker/index.js, /api/sync/<key>).
-// Each device holds a random sync key; devices sharing a key share data. Link a device by
-// opening the "#sync=<key>" link (or QR code) from Settings → Sync devices.
+// Automatic sync of watchlists, indicators, drawings and chart layout across devices.
+// Every device signed in with the same login shares one copy, stored by the SomethingView
+// Cloudflare Worker (worker/index.js, /api/sync/me).
 import { store } from './store.js';
 import { DEFAULT_PROXY } from './data.js';
 import { debounce, withTimeout } from './util.js';
 
-// Shared across devices. Everything else (current symbol, timeframe, active list, layout) stays per device.
+// Shared across devices, like TradingView: lists, indicators, drawings…
 const SYNCED = ['lists', 'listOrder', 'collapsed', 'drawings', 'indicators', 'indicatorDefaults', 'favIntervals'];
-const ORIGIN = new URL(DEFAULT_PROXY).origin;
-const API = `${ORIGIN}/api/sync/`;
+// …and the chart layout. Layout from another device is applied when this app is opened or switched
+// back to, never while you're looking at it (so a chart doesn't jump under you).
+const LAYOUT = ['symbol', 'interval', 'chartType', 'logScale', 'activeList'];
+const pick = (obj, keys) => Object.fromEntries(keys.filter(k => obj?.[k] !== undefined).map(k => [k, obj[k]]));
+const API = `${new URL(DEFAULT_PROXY).origin}/api/sync/me`;
 
 let lastJson = null;
+let pendingLayout = null;
 let remoteHandler = () => {};
 let statusHandler = () => {};
 let lastStatus = ['idle', ''];
+let lastSyncedAt = null;
 
 export const onRemote = fn => { remoteHandler = fn; };
 export const onStatus = fn => { statusHandler = fn; fn(...lastStatus); };
-const setStatus = (st, msg = '') => { lastStatus = [st, msg]; statusHandler(st, msg); };
-
-export const syncKey = () => store.s.settings.syncKey || '';
-export const shareLink = () => `${location.origin}${location.pathname}#sync=${syncKey()}`;
-const newKey = () => [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
-const payload = () => Object.fromEntries(SYNCED.map(k => [k, store.s[k]]));
+export const lastSynced = () => lastSyncedAt;
+const setStatus = (st, msg = '') => {
+  if (st === 'ok') lastSyncedAt = new Date();
+  lastStatus = [st, msg];
+  statusHandler(st, msg);
+};
+const payload = () => pick(store.s, [...SYNCED, ...LAYOUT]);
 
 async function req(method, body) {
   const t = withTimeout(15000);
   try {
-    const res = await fetch(API + syncKey(), {
+    const res = await fetch(API, {
       method, cache: 'no-store', signal: t.signal,
       headers: body ? { 'Content-Type': 'application/json' } : {},
       body: body ? JSON.stringify(body) : undefined,
@@ -40,24 +45,38 @@ async function req(method, body) {
   }
 }
 
-function apply(data, updated) {
-  for (const k of SYNCED) if (data?.[k] !== undefined) store.s[k] = data[k];
+function finishApply() {
   if (!store.s.lists[store.s.activeList]) store.s.activeList = store.s.listOrder[0];
-  store.s.syncUpdated = updated;
   lastJson = JSON.stringify(payload());
   store.save(false);
   store.flush();
   remoteHandler();
 }
 
-// Returns true if newer data from another device was applied, 'missing' if nothing is stored yet
-export async function pull() {
-  if (!syncKey()) return false;
+function apply(data, updated, withLayout) {
+  Object.assign(store.s, pick(data, SYNCED));
+  const layout = pick(data, LAYOUT);
+  if (withLayout) { Object.assign(store.s, layout); pendingLayout = null; } else pendingLayout = layout;
+  store.s.syncUpdated = updated;
+  finishApply();
+}
+
+// Returns true if newer data from another device was applied, 'missing' if nothing is stored yet.
+// layout: also take over the other device's chart layout (on open / when switching back to the app)
+// force: take the account's copy even if this device's looks newer (first sync on a device)
+export async function pull({ layout = false, force = false } = {}) {
   const r = await req('GET');
   if (r.status === 404) return 'missing';
   if (r.status !== 200 || !r.json) throw new Error(`sync server error ${r.status}`);
-  if ((r.json.updated || 0) > (store.s.syncUpdated || 0)) {
-    apply(r.json.data, r.json.updated);
+  if (force || (r.json.updated || 0) > (store.s.syncUpdated || 0)) {
+    apply(r.json.data, r.json.updated, layout);
+    return true;
+  }
+  if (layout && pendingLayout) {
+    // Received earlier while this app was on screen; apply it now
+    Object.assign(store.s, pendingLayout);
+    pendingLayout = null;
+    finishApply();
     return true;
   }
   return false;
@@ -65,7 +84,7 @@ export async function pull() {
 
 export async function push() {
   const r = await req('PUT', { updated: store.s.syncUpdated || Date.now(), data: payload() });
-  if (r.status === 409 && r.json) { apply(r.json.data, r.json.updated); return; } // another device was newer
+  if (r.status === 409 && r.json) { apply(r.json.data, r.json.updated, false); return; } // another device was newer
   if (r.status !== 200) throw new Error(r.json?.error || `sync server error ${r.status}`);
 }
 
@@ -83,8 +102,8 @@ function onChanged() {
   pushSoon();
 }
 
-async function pullQuietly() {
-  try { await pull(); setStatus('ok'); } catch (e) { setStatus('error', e.message); }
+async function pullQuietly(opts) {
+  try { await pull(opts); setStatus('ok'); } catch (e) { setStatus('error', e.message); }
 }
 
 // Call once at startup (before the UI is built, so the first render already shows synced data)
@@ -92,76 +111,29 @@ let started = false;
 export async function start() {
   if (started) return;
   started = true;
-  if (!syncKey()) { store.s.settings.syncKey = newKey(); store.save(false); }
   lastJson = JSON.stringify(payload());
   store.on('changed', onChanged);
   setInterval(() => { if (!document.hidden) pullQuietly(); }, 20000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) pullQuietly(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) pullQuietly({ layout: true }); });
   setStatus('syncing');
   try {
-    const r = await pull();
-    if (r === 'missing') {
-      if (!store.s.syncUpdated) store.s.syncUpdated = Date.now();
-      await push();
-    }
+    // A device joining the account for the first time takes the account's lists as they are
+    const first = !store.s.accountSynced;
+    const r = await pull({ layout: true, force: first });
+    if (r === 'missing' && !store.s.syncUpdated) store.s.syncUpdated = Date.now();
+    // Nothing newer on the server: make sure it has this device's latest (e.g. after a reset or import)
+    if (r !== true) await push();
+    if (first) { store.s.accountSynced = true; store.save(false); }
     setStatus('ok');
   } catch (e) {
     setStatus('error', e.message);
   }
 }
 
-// Short, human-typeable code for linking another device (valid 10 minutes, single use)
-export async function createPairCode() {
-  const res = await fetch(`${ORIGIN}/api/pair`, { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: syncKey() }) });
-  const j = await res.json().catch(() => ({}));
-  if (!res.ok || !j.code) throw new Error(j.error || `pairing error ${res.status}`);
-  return j;
-}
-
-// Short fingerprint of the sync key, to check two devices are linked (safe to show)
-export async function syncId() {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(syncKey()));
-  return [...new Uint8Array(buf)].slice(0, 4).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
-}
-
-async function keyFrom(input) {
-  const s = String(input).trim();
-  const m = s.match(/[a-f0-9]{32}/i);
-  if (m) return m[0].toLowerCase();
-  const code = s.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (code.length !== 6) throw new Error('Enter the 6-character pairing code shown on your other device');
-  const res = await fetch(`${ORIGIN}/api/pair/${code}`, { cache: 'no-store' });
-  const j = await res.json().catch(() => ({}));
-  if (!res.ok || !j.key) throw new Error(j.error || 'Code not found or expired');
-  return j.key;
-}
-
-// Link this device to another device's data (replaces this device's lists).
-// Accepts a pairing code, a sync link or a raw key.
-export async function join(input) {
-  const key = await keyFrom(input);
-  if (key === syncKey()) return false;
-  const prev = { key: syncKey(), updated: store.s.syncUpdated };
-  store.s.settings.syncKey = key;
-  store.s.syncUpdated = 0;
-  store.save(false);
-  try {
-    const r = await pull();
-    if (r === 'missing') throw new Error('No synced data found for that code');
-    setStatus('ok');
-    return true;
-  } catch (e) {
-    store.s.settings.syncKey = prev.key;
-    store.s.syncUpdated = prev.updated;
-    store.save(false);
-    throw e;
-  }
-}
-
 export async function syncNow() {
   setStatus('syncing');
   try {
-    const got = await pull();
+    const got = await pull({ layout: true });
     if (got !== true) await push();
     setStatus('ok');
   } catch (e) {

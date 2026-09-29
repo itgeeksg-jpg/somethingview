@@ -102,12 +102,18 @@ export const store = {
     const d = defaults();
     const { app, version, ...rest } = data;
     this.s = { ...d, ...rest, ui: { ...d.ui, ...(rest.ui || {}) }, settings: { ...d.settings, ...(rest.settings || {}), ...keep } };
+    // An imported backup replaces the account's synced copy too
+    this.s.accountSynced = true;
+    this.s.syncUpdated = Date.now();
     this.flush();
   },
   reset() {
     const keep = this.s.settings;
     this.s = defaults();
     this.s.settings.syncKey = keep.syncKey;
+    // A reset replaces the account's synced copy too (instead of being undone by it)
+    this.s.accountSynced = true;
+    this.s.syncUpdated = Date.now();
     this.flush();
   },
 };

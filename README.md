@@ -18,7 +18,7 @@ watchlists you can create on the fly. It's a static app (no build step) served b
   to add a symbol to another list. You can upload TradingView `.txt` exports, download lists, and share a list as a
   link. Prices update live.
 - **Details panel**: price, day range, 52-week range and performance (1W to 1Y).
-- **Automatic sync across devices**: link your phone once by scanning a QR code.
+- **Automatic sync across devices**: sign in on any device and your lists, indicators, drawings and layout are there.
 - Works on phones: add it to your home screen for an app-like view.
 
 ## Data sources
@@ -39,9 +39,9 @@ The Worker (`worker/index.js`) serves the app files and:
   `npx wrangler secret put AUTH_USER`, `AUTH_PASS`, and `SESSION_SECRET` (a random string). Changing any of them
   signs every device out.
 - **`/api/yahoo`**: Yahoo Finance proxy (Yahoo hosts only).
-- **`/api/sync/<key>`** and **`/api/pair`**: device sync, stored in Cloudflare D1 (`somethingview-sync`, see
-  `worker/schema.sql`). To link a phone, click the dot in the top bar and type the 6-character pairing code on the
-  phone. Lists, indicators and drawings sync; the chart, timeframe and layout stay separate on each device.
+- **`/api/sync/me`**: the signed-in account's watchlists, indicators, drawings and chart layout, stored in Cloudflare
+  D1 (`somethingview-sync`, see `worker/schema.sql`). Every device signed in with the same login shares one copy,
+  with no pairing needed. Another device's layout is applied when you open or switch back to the app.
 
 Deploy after changing anything: `cd worker && npx wrangler deploy`. GitHub Pages serves only the `gh-pages` branch,
 which forwards visitors (and their sync key) to the Worker.
