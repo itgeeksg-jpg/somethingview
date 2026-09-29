@@ -81,9 +81,14 @@ function precisionFromPrices(bars) {
 }
 
 // ---------------------------------------------------------------- Yahoo via proxy
+// Your own proxy (worker/cors-proxy.js on Cloudflare). Used on every device without any setup.
+export const DEFAULT_PROXY = '';
+
+const tmpl = base => u => (base.includes('{url}') ? base.replace('{url}', encodeURIComponent(u)) : base + encodeURIComponent(u));
+// Free public fallbacks: unreliable, used only when no own proxy is reachable
 const PUBLIC_PROXIES = [
-  u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
-  u => 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u),
+  { build: tmpl('https://api.allorigins.win/raw?url=') },
+  { build: tmpl('https://api.allorigins.win/get?url='), unwrap: j => JSON.parse(j.contents) },
 ];
 let proxyStart = 0;
 
@@ -98,22 +103,29 @@ async function slot(fn) {
 
 export class DataError extends Error {}
 
+function proxyList() {
+  const own = [store.s.settings.proxy.trim(), DEFAULT_PROXY].filter(Boolean);
+  const list = [...new Set(own)].map(p => ({ build: tmpl(p), own: true }));
+  const pub = PUBLIC_PROXIES.map((_, i) => PUBLIC_PROXIES[(i + proxyStart) % PUBLIC_PROXIES.length]);
+  // Public proxies fail often; give them a second chance
+  return list.concat(pub, pub);
+}
+
 async function yahoo(url, timeout = 20000) {
-  const custom = store.s.settings.proxy.trim();
-  const builders = custom
-    ? [u => (custom.includes('{url}') ? custom.replace('{url}', encodeURIComponent(u)) : custom + encodeURIComponent(u))]
-    : PUBLIC_PROXIES.map((_, i) => PUBLIC_PROXIES[(i + proxyStart) % PUBLIC_PROXIES.length]);
+  const list = proxyList();
   let lastErr;
-  for (let i = 0; i < builders.length; i++) {
-    const t = withTimeout(timeout);
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i];
+    const t = withTimeout(p.own ? timeout : Math.min(timeout, 25000));
     try {
-      const res = await slot(() => fetch(builders[i](url), { signal: t.signal }));
+      const res = await slot(() => fetch(p.build(url), { signal: t.signal }));
       const text = await res.text();
       let json;
-      try { json = JSON.parse(text); } catch { throw new Error(`proxy returned HTTP ${res.status}`); }
+      try { json = JSON.parse(text); if (p.unwrap) json = p.unwrap(json); } catch { throw new Error(`proxy returned HTTP ${res.status}`); }
       const err = json?.chart?.error || json?.finance?.error;
       if (err) throw new DataError(err.description || err.code || 'Yahoo error');
-      if (!custom) proxyStart = (i + proxyStart) % PUBLIC_PROXIES.length;
+      const pi = PUBLIC_PROXIES.indexOf(p);
+      if (pi >= 0) proxyStart = pi;
       return json;
     } catch (e) {
       if (e instanceof DataError) throw e;
@@ -122,8 +134,9 @@ async function yahoo(url, timeout = 20000) {
       t.done();
     }
   }
+  const hasOwn = list.some(p => p.own);
   throw new Error(`Yahoo data unavailable (${lastErr?.name === 'AbortError' ? 'proxy timed out' : lastErr?.message || 'proxy failed'}). ` +
-    (custom ? 'Check your proxy URL in Settings.' : 'The free public proxy is flaky: add your own Cloudflare Worker proxy in Settings.'));
+    (hasOwn ? 'Your proxy did not respond — check it in Settings.' : 'The free public proxy is down: set up your own proxy (Settings).'));
 }
 
 const YQ = 'https://query1.finance.yahoo.com';

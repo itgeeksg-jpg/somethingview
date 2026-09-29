@@ -9,7 +9,7 @@
 // Set ALLOWED_ORIGIN to your GitHub Pages origin (e.g. "https://yourname.github.io") to lock it down further.
 
 const ALLOWED_HOSTS = ['query1.finance.yahoo.com', 'query2.finance.yahoo.com'];
-const ALLOWED_ORIGIN = '*';
+const ALLOWED_ORIGIN = '*'; // e.g. 'https://itgeeksg-jpg.github.io' to restrict
 
 export default {
   async fetch(request, env, ctx) {
