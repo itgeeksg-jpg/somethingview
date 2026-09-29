@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SomethingView</title>
+  <meta name="description" content="Free charting with live crypto, stocks, indices and FX, indicators, drawing tools and watchlists.">
+  <meta name="theme-color" content="#131722">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header id="topbar">
+    <button class="ibtn mobile-only" id="tools-toggle" title="Drawing tools"></button>
+    <button id="sym-btn" title="Symbol search (just start typing)"></button>
+    <button class="ibtn" id="add-to-list" title="Add symbol to watchlist"></button>
+    <span class="tb-sep"></span>
+    <div id="intervals"></div>
+    <span class="tb-sep"></span>
+    <button class="ibtn" id="type-btn" title="Chart type"></button>
+    <button class="tbtn" id="ind-btn" title="Indicators"></button>
+    <span class="grow"></span>
+    <span id="sync-dot" class="hidden" title="Cloud sync"></span>
+    <button class="ibtn" id="shot-btn" title="Download chart image"></button>
+    <button class="ibtn desktop-only" id="full-btn" title="Fullscreen"></button>
+    <button class="ibtn" id="settings-btn" title="Settings"></button>
+    <button class="ibtn" id="watch-toggle" title="Watchlist"></button>
+  </header>
+
+  <div id="app">
+    <nav id="tools"></nav>
+    <section id="chart-area">
+      <div id="chart-wrap">
+        <div id="chart"></div>
+        <div id="legend-layer"></div>
+        <div id="chart-msg" class="hidden"></div>
+      </div>
+      <footer id="bottombar">
+        <div id="ranges"></div>
+        <span class="grow"></span>
+        <span id="feed-status"></span>
+        <span id="clock"></span>
+        <button class="bbtn" id="log-btn" title="Logarithmic scale">log</button>
+        <button class="bbtn" id="auto-btn" title="Reset price scale">auto</button>
+      </footer>
+    </section>
+    <div id="watch-resizer"></div>
+    <aside id="watch">
+      <div id="wl"></div>
+      <div id="details-split"></div>
+      <div id="details"></div>
+    </aside>
+    <nav id="strip"></nav>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toast-root"></div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
