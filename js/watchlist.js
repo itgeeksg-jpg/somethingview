@@ -6,6 +6,7 @@ import { getQuote, leaves } from './data.js';
 import { menu, modal, prompt, confirm, symbolSearch, avatar } from './dialogs.js';
 
 const isSection = s => s.startsWith('###');
+export const WL_SIZES = { S: ['Small', 13], M: ['Medium', 14.5], L: ['Large', 16], XL: ['Extra large', 17.5] };
 const sectionName = s => s.slice(3);
 const resCache = new Map();
 export const res = key => { let r = resCache.get(key); if (!r) { r = resolve(key); resCache.set(key, r); } return r; };
@@ -49,7 +50,7 @@ export class Watchlist {
       this.nameBtn,
       h('span', { class: 'grow' }),
       h('button', { class: 'ibtn', title: 'Add symbol', html: ICONS.plus, onclick: () => this.addSymbolDialog() }),
-      h('button', { class: 'ibtn', title: 'More', html: ICONS.more, onclick: e => this.openMenu(e.currentTarget, true) }));
+      h('button', { class: 'ibtn', title: 'Text size & columns', html: ICONS.more, onclick: e => this.viewMenu(e.currentTarget) }));
     const col = (key, label) => h('button', { class: `wl-col c-${key}`, onclick: () => this.toggleSort(key) }, label);
     this.cols = h('div', { class: 'wl-cols' }, col('sym', 'Symbol'), col('last', 'Last'), col('chg', 'Chg'), col('pct', 'Chg%'));
     this.body = h('div', { class: 'wl-body' });
@@ -57,6 +58,33 @@ export class Watchlist {
     // A drag ends with a click on the row; don't treat it as selecting the symbol
     this.body.addEventListener('click', e => { if (this.justDragged) e.stopPropagation(); }, true);
     this.el.append(this.head, this.cols, this.body);
+    // Hide the Chg column automatically when the panel is too narrow for all the numbers
+    new ResizeObserver(() => this.applyView()).observe(this.el);
+    this.applyView();
+  }
+
+  applyView() {
+    const ui = store.s.ui;
+    const px = WL_SIZES[ui.wlSize]?.[1] || WL_SIZES.M[1];
+    this.el.style.setProperty('--wl-fs', `${px}px`);
+    // symbol ≥ 4.5em + avatar + 3 number columns + gaps/padding
+    const needed = px * (1.35 + 4.5 + 5.9 + 5.1 + 4.3) + 48;
+    const narrow = this.el.clientWidth > 0 && this.el.clientWidth < needed;
+    this.el.classList.toggle('hide-chg', ui.wlShowChg === false || narrow);
+  }
+
+  viewMenu(anchor) {
+    const ui = store.s.ui;
+    const set = patch => { Object.assign(ui, patch); store.save(false); this.applyView(); };
+    menu(anchor, [
+      { header: 'Text size' },
+      ...Object.entries(WL_SIZES).map(([k, [label]]) => ({ label, active: (ui.wlSize || 'M') === k, onClick: () => set({ wlSize: k }) })),
+      { sep: true },
+      { header: 'Columns' },
+      { label: `${ui.wlShowChg === false ? 'Show' : 'Hide'} “Chg” column`, onClick: () => set({ wlShowChg: ui.wlShowChg === false }) },
+      { sep: true },
+      { label: 'List options…', icon: 'menu', onClick: () => this.openMenu(anchor) },
+    ], { align: 'right' });
   }
 
   toggleSort(col) {

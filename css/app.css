@@ -196,17 +196,23 @@ body.watch-closed #watch, body.watch-closed #watch-resizer { display: none; }
 .wl-name span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wl-name:hover { background: var(--hover); }
 .wl-name .chev svg { width: 14px; height: 14px; }
+/* Watchlist text size: --wl-fs is set from the watchlist's ⋯ menu (Small / Medium / Large / Extra large).
+   Number columns are sized in em so values like 107,012.64 fit at every size. */
+#wl { --wl-fs: 14.5px; container-type: inline-size; }
 .wl-cols, .wl-row {
-  display: grid; grid-template-columns: 22px minmax(60px, 1.3fr) minmax(56px, 1fr) minmax(46px, 0.8fr) minmax(46px, 0.75fr) 0; align-items: center;
-  column-gap: 6px; padding: 0 8px 0 10px;
+  display: grid; align-items: center; column-gap: 6px; padding: 0 8px 0 10px;
+  grid-template-columns: calc(var(--wl-fs) * 1.35) minmax(0, 1fr) calc(var(--wl-fs) * 5.9) calc(var(--wl-fs) * 5.1) calc(var(--wl-fs) * 4.3) 0;
 }
-.wl-cols { height: 24px; color: var(--muted); font-size: 11px; flex: none; border-bottom: 1px solid var(--border); }
-.wl-col { text-align: right; color: inherit; font-size: 11px; }
+#wl.hide-chg .wl-cols, #wl.hide-chg .wl-row { grid-template-columns: calc(var(--wl-fs) * 1.35) minmax(0, 1fr) calc(var(--wl-fs) * 5.9) 0 calc(var(--wl-fs) * 4.3) 0; column-gap: 6px; }
+#wl.hide-chg .c-chg { visibility: hidden; }
+.wl-cols { height: calc(var(--wl-fs) * 1.75); color: var(--muted); font-size: calc(var(--wl-fs) * 0.78); flex: none; border-bottom: 1px solid var(--border); }
+.wl-col { text-align: right; color: inherit; font-size: inherit; white-space: nowrap; }
 .wl-col.c-sym { grid-column: 1 / span 2; text-align: left; }
 .wl-col.sorted { color: var(--text); }
 .wl-col.sorted::after { content: attr(data-dir); font-size: 8px; margin-left: 3px; }
 .wl-body { flex: 1; overflow-y: auto; overflow-x: hidden; }
-.wl-row { height: 30px; cursor: pointer; position: relative; font-variant-numeric: tabular-nums; border-bottom: 1px solid transparent; }
+.wl-row { height: calc(var(--wl-fs) * 2.15); font-size: var(--wl-fs); cursor: pointer; position: relative; font-variant-numeric: tabular-nums; border-bottom: 1px solid transparent; }
+.wl-row .avatar { width: calc(var(--wl-fs) * 1.3) !important; height: calc(var(--wl-fs) * 1.3) !important; font-size: calc(var(--wl-fs) * 0.65) !important; }
 .wl-row:hover { background: var(--hover); }
 .wl-row.active { background: var(--accent-soft); }
 .wl-row .c-sym { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -233,7 +239,7 @@ body.wl-dragging, body.wl-dragging * { cursor: grabbing !important; user-select:
 @keyframes fu { from { background: rgba(8, 153, 129, 0.45); } to { background: transparent; } }
 @keyframes fd { from { background: rgba(242, 54, 69, 0.45); } to { background: transparent; } }
 .wl-section {
-  display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 8px; font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; gap: 4px; height: calc(var(--wl-fs) * 1.9); padding: 0 8px; font-size: calc(var(--wl-fs) * 0.78); font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); cursor: pointer; position: relative;
   border-top: 1px solid var(--border); background: var(--panel);
 }

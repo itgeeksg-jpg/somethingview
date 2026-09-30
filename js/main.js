@@ -6,7 +6,7 @@ import { INTERVALS, QUICK_RANGE, loadBars, loadOlder, subscribeBars, QuoteFeed, 
 import { ChartView, CHART_TYPES } from './chart.js';
 import { TOOLS } from './drawings.js';
 import { INDICATORS } from './indicators.js';
-import { Watchlist } from './watchlist.js';
+import { Watchlist, WL_SIZES } from './watchlist.js';
 import { Details } from './details.js';
 import { menu, modal, prompt, confirm, symbolSearch, indicatorPicker, indicatorSettings } from './dialogs.js';
 import * as sync from './sync.js';
@@ -324,8 +324,11 @@ function openSettings() {
   const theme = h('select', { class: 'input' }, h('option', { value: 'dark', selected: st.theme === 'dark' }, 'Dark'), h('option', { value: 'light', selected: st.theme === 'light' }, 'Light'));
   const proxy = h('input', { class: 'input', placeholder: 'built-in', value: st.proxy });
   const refresh = h('input', { class: 'input', type: 'number', min: 10, value: st.refreshSec });
+  const wlSize = h('select', { class: 'input' }, ...Object.entries(WL_SIZES).map(([k, [label]]) => h('option', { value: k, selected: (s().ui.wlSize || 'M') === k }, label)));
 
   const apply = () => {
+    s().ui.wlSize = wlSize.value;
+    wl.applyView();
     st.theme = theme.value;
     st.proxy = proxy.value.trim();
     st.refreshSec = Math.max(10, +refresh.value || 30);
@@ -348,7 +351,8 @@ function openSettings() {
   const body = h('div', { class: 'settings' },
     h('section', {},
       h('h4', {}, 'Appearance'),
-      h('div', { class: 'form grid2' }, h('label', {}, 'Theme'), theme)),
+      h('div', { class: 'form grid2' }, h('label', {}, 'Theme'), theme,
+        h('label', {}, 'Watchlist text'), wlSize)),
     h('section', {},
       h('h4', {}, 'Stock / index / FX data'),
       h('p', { class: 'muted small', html: 'Crypto <b>USDT</b> pairs stream straight from Binance. Everything else comes from Yahoo Finance through this site\'s own server (built in). Leave the field empty to use it.' }),
@@ -511,6 +515,12 @@ async function init() {
   // Get the latest lists from other devices before the first render (don't wait forever)
   await Promise.race([sync.start(), new Promise(r => setTimeout(r, 4000))]);
   if (!Array.isArray(s().indicators)) s().indicators = DEFAULT_INDICATORS();
+  // Watchlist text got bigger: widen the old default panel once so the Chg column still fits
+  if (!s().ui.wlWidened) {
+    if (s().ui.watchWidth <= 330) s().ui.watchWidth = 370;
+    s().ui.wlWidened = true;
+    store.save(false);
+  }
   // FiBB changed from VWMA±StdDev (length/source/mult) to SMA±ratio×ATR (Len + 3 ratios): drop old-style settings
   const oldFibb = x => x && x.params && ('mult' in x.params || 'source' in x.params);
   for (const inst of s().indicators) if (inst.type === 'FIBB' && oldFibb(inst)) Object.assign(inst, { params: {}, colors: {}, styles: {} });

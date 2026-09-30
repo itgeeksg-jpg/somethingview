@@ -45,7 +45,7 @@ function defaults() {
     collapsed: {},
     drawings: {},
     favIntervals: ['5m', '1h', '4h', '1D', '1W'],
-    ui: { watchWidth: 320, watchOpen: true, detailsOpen: true, detailsHeight: 260 },
+    ui: { watchWidth: 370, watchOpen: true, detailsOpen: true, detailsHeight: 260, wlSize: 'M', wlShowChg: true },
     settings: {
       proxy: '',
       refreshSec: 30,
