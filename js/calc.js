@@ -127,7 +127,9 @@ export function toggleCalc(anchor) {
       let txt;
       try { txt = rate.toLocaleString('en', { style: 'currency', currency: cur, ...opts }); } catch { txt = `${rate.toLocaleString('en', opts)} ${cur}`; }
       rateEl.textContent = `${coin}/${cur} = ${txt}`;
-      const satsNote = coin === 'BTC' ? '' : ` · 1 ${coin} = ${Math.round(satsPer).toLocaleString('en-US')} sats`;
+      const satsNote = coin === 'BTC' ? '' : satsPer >= 10
+        ? ` · 1 ${coin} = ${Math.round(satsPer).toLocaleString('en-US')} sats`
+        : ` · 1 sat = ${(1 / satsPer).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${coin}`;
       subEl.textContent = `${r.source} · ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${satsNote}`;
       update(last);
       if (feedback) { refreshBtn.textContent = 'Refreshed'; setTimeout(() => { refreshBtn.textContent = 'Refresh rate'; }, 1500); }

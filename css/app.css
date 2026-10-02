@@ -465,8 +465,8 @@ kbd { background: var(--panel-2); border: 1px solid var(--border); border-radius
 .calc-row { display: flex; gap: 6px; align-items: center; }
 .calc-row .input { flex: 1; min-width: 0; height: 40px; font-size: 16px; font-variant-numeric: tabular-nums; }
 .calc-row .input.copied { border-color: var(--up); }
-.calc-cur { flex: none !important; width: 78px; }
-.calc-unit { width: 78px; flex: none; color: var(--muted); font-size: 13px; padding-left: 4px; }
+.calc-cur { flex: none !important; width: 92px; }
+.calc-unit { width: 92px; flex: none; color: var(--muted); font-size: 13px; padding-left: 4px; }
 .calc-copy { height: 40px; padding: 0 12px; color: #f7931a; }
 .calc-refresh { margin-top: 4px; height: 38px; }
 @media (max-width: 820px) {
