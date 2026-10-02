@@ -249,6 +249,12 @@ async function binanceBars(sym, iv, { endTime, pages } = {}) {
   };
 }
 
+// 24h ticker; `live` is false for pairs Binance has stopped trading (their price is frozen)
+export async function binanceTicker(sym) {
+  const t = await binance(`/api/v3/ticker/24hr?symbol=${sym}`);
+  return { price: +t.lastPrice, live: t.count > 0 && t.closeTime > Date.now() - 3600e3 };
+}
+
 export async function binancePrice(sym) {
   const j = await binance(`/api/v3/ticker/price?symbol=${sym}`);
   return +j.price;
