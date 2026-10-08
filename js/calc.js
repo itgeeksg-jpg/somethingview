@@ -11,7 +11,7 @@ import { prompt } from './dialogs.js';
 const SATS = 100_000_000;
 const CURRENCIES = ['SGD', 'USD', 'EUR', 'GBP', 'KRW', 'THB', 'MYR', 'JPY', 'AUD', 'HKD', 'CNY'];
 const NO_DECIMALS = new Set(['KRW', 'JPY']);
-const BASE_COINS = ['BTC', 'ETH', 'SOL', 'XRP', 'BNB', 'DOGE'];
+const BASE_COINS = ['BTC', 'USDT', 'ETH', 'SOL', 'XRP', 'BNB', 'DOGE'];
 const STABLE = new Set(['USDT', 'USDC', 'FDUSD', 'DAI', 'TUSD']);
 
 let panel = null;
@@ -33,7 +33,15 @@ function coinChoices() {
 }
 
 async function usdPrice(coin) {
-  if (STABLE.has(coin)) return { usd: 1, source: 'stablecoin' };
+  // Stablecoins: real market price from Yahoo (e.g. USDT-USD 0.9997), 1:1 peg if that fails
+  if (STABLE.has(coin)) {
+    try {
+      const { bars } = await loadBars(resolve(`YAHOO:${coin}-USD`), '1D', { range: '5d' });
+      const usd = bars[bars.length - 1]?.close;
+      if (usd > 0.5 && usd < 1.5) return { usd, source: 'Yahoo' };
+    } catch { /* fall through to peg */ }
+    return { usd: 1, source: `${coin} 1:1 USD` };
+  }
   try {
     const t = await binanceTicker(`${coin}USDT`);
     if (t.live && t.price > 0) return { usd: t.price, source: 'Binance' };
@@ -70,7 +78,9 @@ async function fetchRate(cur, coin) {
 }
 
 const num = s => parseFloat(String(s).replace(/[,\s]/g, ''));
-const fmtCoin = (v, coin) => (coin === 'BTC' ? v.toFixed(8) : v.toLocaleString('en-US', { maximumFractionDigits: v >= 1000 ? 2 : v >= 1 ? 6 : 8 }));
+const fmtCoin = (v, coin) => (coin === 'BTC' ? v.toFixed(8)
+  : STABLE.has(coin) ? v.toLocaleString('en-US', { maximumFractionDigits: v >= 1 ? 2 : 4 })
+  : v.toLocaleString('en-US', { maximumFractionDigits: v >= 1000 ? 2 : v >= 1 ? 6 : 8 }));
 
 export function toggleCalc(anchor) {
   if (panel) { panel._close(); return; }
@@ -157,7 +167,8 @@ export function toggleCalc(anchor) {
     let next = coinSel.value;
     if (next === '__other') {
       const t = await prompt('Add a coin', { placeholder: 'Ticker, e.g. PEPE, LINK, KAS', okText: 'Add' });
-      next = (t || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/(USDT|USD)$/, '');
+      next = (t || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (!STABLE.has(next)) next = next.replace(/(USDT|USD)$/, '');
       if (!next) { coinSel.value = coin; return; }
       ui.calcCoins = [...new Set([...(ui.calcCoins || []), next])];
     }
