@@ -114,8 +114,9 @@ function setInterval_(iv) {
 
 function refreshFeed() {
   const items = (wl.list?.items || []).filter(x => !x.startsWith('###')).map(k => resolve(k));
-  items.push(resolve(s().symbol));
-  feed.setSymbols(items);
+  const main = resolve(s().symbol);
+  items.push(main);
+  feed.setSymbols(items, main);
 }
 
 function updateTitle() {

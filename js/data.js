@@ -369,7 +369,10 @@ export function subscribeBars(res, iv, onBar) {
     } catch { /* keep polling */ }
   };
   const id = setInterval(tick, Math.max(10, store.s.settings.refreshSec) * 1000);
-  return () => { stopped = true; clearInterval(id); };
+  // Catch up straight away when you come back to the tab instead of waiting for the next tick
+  const onVis = () => { if (!document.hidden) tick(); };
+  document.addEventListener('visibilitychange', onVis);
+  return () => { stopped = true; clearInterval(id); document.removeEventListener('visibilitychange', onVis); };
 }
 
 // ---------------------------------------------------------------- Quotes
@@ -466,12 +469,14 @@ export class QuoteFeed {
     this.onUpdate = onUpdate;
     this.yahoo = [];
     this.binance = [];
+    this.mainYahoo = []; // the charted symbol: kept fresh in background tabs so the tab title stays current
     this.stopWs = null;
     this.timer = setInterval(() => this.poll(), Math.max(10, store.s.settings.refreshSec) * 1000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) this.poll(); });
   }
 
-  setSymbols(resList) {
+  setSymbols(resList, main) {
+    this.mainYahoo = main ? leaves(main).filter(r => r.src === 'yahoo').map(r => r.sym) : [];
     resList = resList.flatMap(leaves);
     const y = [...new Set(resList.filter(r => r.src === 'yahoo').map(r => r.sym))];
     const b = [...new Set(resList.filter(r => r.src === 'binance').map(r => r.sym))];
@@ -491,7 +496,10 @@ export class QuoteFeed {
           bnQuote(d.s, d);
           if (!changed) {
             changed = new Set();
-            requestAnimationFrame(() => { const c = changed; changed = null; this.onUpdate(c); });
+            // Batch per frame; animation frames don't run in background tabs, so use a timer there
+            const flush = () => { const c = changed; changed = null; this.onUpdate(c); };
+            if (document.hidden) setTimeout(flush, 500);
+            else requestAnimationFrame(flush);
           }
           changed.add(d.s);
         });
@@ -501,8 +509,9 @@ export class QuoteFeed {
   }
 
   poll() {
-    if (document.hidden || !this.yahoo.length) return;
-    yahooQuotes(this.yahoo).then(() => this.onUpdate());
+    const syms = document.hidden ? this.mainYahoo : this.yahoo;
+    if (!syms.length) return;
+    yahooQuotes(syms).then(() => this.onUpdate());
   }
 }
 
