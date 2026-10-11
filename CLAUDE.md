@@ -9,7 +9,8 @@ features, data sources and hosting.
    and reload when it changes.
 2. Commit and push to `main`. **Pushing does not update the live site.**
 3. Deploy the Worker: `cd worker && npx wrangler deploy`. Claude isn't allowed to run production deploys, so ask
-   the user to run `! cd worker && npx wrangler deploy` after every push.
+   the user to run `! cd worker && npx wrangler deploy` after every push. If the output says "No updated asset
+   files to upload", that's fine: the files were already live from an earlier deploy.
 
 Live site: https://somethingview.itgeeksg.workers.dev (behind a login).
 
