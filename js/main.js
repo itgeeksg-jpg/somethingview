@@ -43,7 +43,7 @@ async function loadChart() {
   setFeedStatus(res, 'loading');
   const slow = setTimeout(() => { if (seq === loadSeq) showMsg('<div class="spinner"></div>Loading…'); }, 350);
   try {
-    const quick = res.src !== 'binance' ? QUICK_RANGE[iv] : null;
+    const quick = !isLive(res) ? QUICK_RANGE[iv] : null;
     const data = await loadBars(res, iv, quick ? { range: quick } : {});
     if (seq !== loadSeq) return;
     if (!data.bars.length) throw new Error('No data for this symbol / timeframe');
@@ -129,9 +129,12 @@ function updateTitle() {
     : 'SomethingView';
 }
 
+// Binance symbols, and calculated ones made only from Binance symbols, stream in real time
+const isLive = res => leaves(res).every(l => l.src === 'binance');
+
 function setFeedStatus(res, state) {
   const el = $('#feed-status');
-  const live = leaves(res).every(l => l.src === 'binance');
+  const live = isLive(res);
   const label = state === 'loading' ? 'Loading…' : state === 'error' ? 'Data error' : state === 'history' ? 'Loading history…'
     : live ? 'Binance · live' : `${res.src === 'synthetic' ? 'Calculated' : 'Yahoo'} · refresh ${s().settings.refreshSec}s`;
   el.className = `feed ${state === 'ok' ? (live ? 'live' : 'delayed') : state}`;

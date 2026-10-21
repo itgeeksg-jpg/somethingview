@@ -84,6 +84,15 @@ const EXCHANGE_SUFFIX = {
 const CRYPTO_EXCHANGES = new Set(['BITFINEX', 'COINBASE', 'BITSTAMP', 'KRAKEN', 'GEMINI', 'BYBIT', 'OKX', 'CRYPTO', 'INDEX',
   'BINANCEUS', 'MEXC', 'KUCOIN', 'BITGET', 'PYTH', 'CRYPTOCOM', 'HTX', 'GATEIO', 'BITMEX', 'DERIBIT', 'UPBIT']);
 
+// Coins Binance relisted under a new name: new base -> old base. Charts carry on into the old pair's history.
+const RENAMED = { GRAM: 'TON' };
+
+// The pair a Binance symbol traded as before a rename (GRAMUSDT -> TONUSDT), or null
+export function predecessor(sym) {
+  const [b, q] = splitBinance(sym);
+  return RENAMED[b] && q ? RENAMED[b] + q : null;
+}
+
 export function splitBinance(sym) {
   for (const q of BINANCE_QUOTES) {
     if (sym.endsWith(q) && sym.length > q.length) return [sym.slice(0, -q.length), q];

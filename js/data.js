@@ -3,7 +3,7 @@
 //  - Yahoo Finance (via a CORS proxy) for everything else: stocks, indices, FX, futures, crypto USD pairs
 import { store } from './store.js';
 import { withTimeout, autoPrecision } from './util.js';
-import { resolve, aliasMatches, splitBinance } from './symbols.js';
+import { resolve, aliasMatches, splitBinance, predecessor } from './symbols.js';
 
 export const INTERVALS = {
   '1m': { label: '1 minute', sec: 60, bn: '1m', yi: '1m', yr: '5d', poll: '1d' },
@@ -226,16 +226,37 @@ function bnToBar(k, iv) {
   };
 }
 
+// First bar of a renamed pair, per interval ("GRAMUSDT|1h" -> ms). Anything older comes from its predecessor.
+const listedAt = new Map();
+
 async function binanceBars(sym, iv, { endTime, pages } = {}) {
   const conf = INTERVALS[iv];
   pages ??= conf.daily ? 12 : 2;
+  const prev = predecessor(sym);
+  const lk = `${sym}|${iv}`;
   let all = [];
   let end = endTime;
   let hasMore = false;
   for (let p = 0; p < pages; p++) {
-    const k = await binance(`/api/v3/klines?symbol=${sym}&interval=${conf.bn}&limit=1000${end ? `&endTime=${end}` : ''}`);
+    const s = prev && end != null && end < listedAt.get(lk) ? prev : sym;
+    let k;
+    try {
+      k = await binance(`/api/v3/klines?symbol=${s}&interval=${conf.bn}&limit=1000${end ? `&endTime=${end}` : ''}`);
+    } catch (e) {
+      if (s === sym || !(e instanceof DataError)) throw e;
+      hasMore = false; // no old pair for this quote
+      break;
+    }
     all = k.concat(all);
     hasMore = k.length === 1000;
+    if (!hasMore && s === sym && prev && (k.length || end != null)) {
+      // Reached the renamed pair's listing: carry on into the old pair's history without using up a page
+      listedAt.set(lk, k.length ? k[0][0] : end + 1);
+      end = listedAt.get(lk) - 1;
+      hasMore = true;
+      p--;
+      continue;
+    }
     if (!hasMore) break;
     end = k[0][0] - 1;
   }
@@ -308,7 +329,7 @@ export async function loadBars(res, iv, { range } = {}) {
   if (res.src === 'synthetic') {
     const [A, B] = await Promise.all(res.legs.map(l => loadBars(l, iv, { range })));
     const bars = combineSeries(A.bars, B.bars, res.op);
-    data = { bars, meta: { name: res.desc, exchange: 'Calculated', currency: '', type: res.type,
+    data = { bars, ...combinedCursor(A, B), meta: { name: res.desc, exchange: 'Calculated', currency: '', type: res.type,
       precision: bars.length ? autoPrecision(bars[bars.length - 1].close) : 2 } };
   } else if (res.src === 'binance') {
     data = await binanceBars(res.sym, iv, range ? { pages: 1 } : {});
@@ -319,8 +340,20 @@ export async function loadBars(res, iv, { range } = {}) {
   return data;
 }
 
+// A calculated series can only go back as far as both legs, so both legs page from the later of their two cursors
+function combinedCursor(A, B) {
+  const cursor = A.cursor != null && B.cursor != null ? Math.max(A.cursor, B.cursor) : null;
+  return { cursor, hasMore: cursor != null && !!A.hasMore && !!B.hasMore };
+}
+
 export async function loadOlder(res, iv, cursor) {
-  if (res.src !== 'binance' || cursor == null) return null;
+  if (cursor == null) return null;
+  if (res.src === 'synthetic') {
+    const [A, B] = await Promise.all(res.legs.map(l => loadOlder(l, iv, cursor)));
+    if (!A || !B) return null;
+    return { bars: combineSeries(A.bars, B.bars, res.op), ...combinedCursor(A, B) };
+  }
+  if (res.src !== 'binance') return null;
   return binanceBars(res.sym, iv, { endTime: cursor, pages: 1 });
 }
 
