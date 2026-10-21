@@ -55,7 +55,12 @@ const CRYPTO_NAMES = {
   TAO: 'Bittensor', KAS: 'Kaspa', STX: 'Stacks', IMX: 'Immutable', GRT: 'The Graph', ENA: 'Ethena', ONDO: 'Ondo',
   JUP: 'Jupiter', PYTH: 'Pyth', WLD: 'Worldcoin', POL: 'Polygon', ZEC: 'Zcash', DASH: 'Dash', XTZ: 'Tezos',
   EOS: 'EOS', SAND: 'The Sandbox', MANA: 'Decentraland', CRV: 'Curve', LDO: 'Lido', RUNE: 'THORChain', PAXG: 'PAX Gold',
-  USDC: 'USD Coin', USDT: 'Tether', FDUSD: 'First Digital USD',
+  USDC: 'USD Coin', USDT: 'Tether', FDUSD: 'First Digital USD', GRAM: 'Gram (prev. Toncoin)',
+};
+
+// Crypto crosses Binance doesn't list, calculated live from its USDT pairs: name -> [numerator, denominator]
+const CROSSES = {
+  GRAMBTC: ['GRAMUSDT', 'BTCUSDT'],
 };
 const QUOTE_NAMES = { USDT: 'TetherUS', USDC: 'USD Coin', FDUSD: 'First Digital USD', USD: 'U.S. Dollar', BTC: 'Bitcoin', ETH: 'Ethereum', EUR: 'Euro', SGD: 'Singapore Dollar', BNB: 'BNB', TRY: 'Turkish Lira', JPY: 'Japanese Yen', GBP: 'British Pound', AUD: 'Australian Dollar', BRL: 'Brazilian Real' };
 
@@ -130,6 +135,14 @@ export function resolve(raw) {
   const fut = s.match(/^([A-Z0-9]{1,4})1!$/);
   if (fut) return { key, display: s, src: 'yahoo', sym: `${fut[1]}=F`, desc: `${fut[1]} continuous futures`, type: 'futures', exchange: '' };
 
+  if (CROSSES[s] && (!ex || CRYPTO_EXCHANGES.has(ex))) {
+    const [a, b] = CROSSES[s];
+    const [base] = splitBinance(a), [quote] = splitBinance(b);
+    const r = synthetic(key, `BINANCE:${a}`, '/', `BINANCE:${b}`, { type: 'crypto', base,
+      desc: `${CRYPTO_NAMES[base]} / ${CRYPTO_NAMES[quote]} (${a} ÷ ${b})` });
+    r.display = s;
+    return r;
+  }
   if (ex && CRYPTO_EXCHANGES.has(ex) && /(USDT|USDC|FDUSD)$/.test(s)) return resolve('BINANCE:' + s);
   if (!ex || CRYPTO_EXCHANGES.has(ex)) {
     if (/^[A-Z0-9]{2,12}(USDT|USDC|FDUSD)$/.test(s)) return resolve('BINANCE:' + s);

@@ -2,7 +2,7 @@ import { store, DEFAULT_INDICATORS } from './store.js';
 import { $, h, uid, toast, download, pickFile, isTyping, fmtPrice, fmtPct, autoPrecision } from './util.js';
 import { ICONS } from './icons.js';
 import { resolve } from './symbols.js';
-import { INTERVALS, QUICK_RANGE, loadBars, loadOlder, subscribeBars, QuoteFeed, getQuote } from './data.js';
+import { INTERVALS, QUICK_RANGE, loadBars, loadOlder, subscribeBars, QuoteFeed, getQuote, leaves } from './data.js';
 import { ChartView, CHART_TYPES } from './chart.js';
 import { TOOLS } from './drawings.js';
 import { INDICATORS } from './indicators.js';
@@ -131,7 +131,7 @@ function updateTitle() {
 
 function setFeedStatus(res, state) {
   const el = $('#feed-status');
-  const live = res.src === 'binance';
+  const live = leaves(res).every(l => l.src === 'binance');
   const label = state === 'loading' ? 'Loading…' : state === 'error' ? 'Data error' : state === 'history' ? 'Loading history…'
     : live ? 'Binance · live' : `${res.src === 'synthetic' ? 'Calculated' : 'Yahoo'} · refresh ${s().settings.refreshSec}s`;
   el.className = `feed ${state === 'ok' ? (live ? 'live' : 'delayed') : state}`;
