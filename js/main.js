@@ -525,11 +525,13 @@ async function init() {
     s().ui.wlWidened = true;
     store.save(false);
   }
-  // Add the AI list once. Wait for sync so a device that already got it from another device doesn't add a second one.
-  if (synced && !s().ui.aiListAdded) {
-    if (!Object.values(s().lists).some(l => l.name === 'AI')) {
+  // Add the AI list once and put it under "Recently used" (per device) so it's in the list menu.
+  // Wait for sync so a device that already got it from another device doesn't add a second one.
+  if (synced && !s().ui.aiListShown) {
+    let ai = Object.values(s().lists).find(l => l.name === 'AI');
+    if (!ai) {
       const id = uid();
-      s().lists[id] = { id, name: 'AI', items: [
+      ai = s().lists[id] = { id, name: 'AI', items: [
         '###Index & ETFs', 'SOX', 'SMH', 'AIQ', 'BOTZ',
         '###Chips', 'NVDA', 'AMD', 'AVGO', 'TSM', 'ASML', 'MU', 'ARM', 'MRVL', 'AMAT', 'LRCX', '000660.KS', '8035.T',
         '###Hyperscalers', 'MSFT', 'GOOGL', 'AMZN', 'META', 'ORCL', 'AAPL', 'TSLA',
@@ -540,7 +542,8 @@ async function init() {
       s().listOrder.push(id);
       store.save();
     }
-    s().ui.aiListAdded = true;
+    s().recentLists = [ai.id, ...s().recentLists.filter(x => x !== ai.id)].slice(0, 6);
+    s().ui.aiListShown = true;
     store.save(false);
   }
   // FiBB changed from VWMA±StdDev (length/source/mult) to SMA±ratio×ATR (Len + 3 ratios): drop old-style settings
