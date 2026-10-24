@@ -6,6 +6,7 @@ export const ALIASES = {
   SPX: ['^GSPC', 'S&P 500 Index', 'index'],
   DJI: ['^DJI', 'Dow Jones Industrial Average', 'index'],
   NDX: ['^NDX', 'Nasdaq 100 Index', 'index'],
+  SOX: ['^SOX', 'PHLX Semiconductor Index', 'index'],
   IXIC: ['^IXIC', 'Nasdaq Composite', 'index'],
   RUT: ['^RUT', 'Russell 2000', 'index'],
   VIX: ['^VIX', 'CBOE Volatility Index', 'index'],

@@ -415,7 +415,7 @@ kbd { background: var(--panel-2); border: 1px solid var(--border); border-radius
   }
   body.tools-open #tools { transform: none; }
   #watch {
-    position: fixed; top: var(--topbar-h); right: 0; bottom: 0; z-index: 30; width: min(380px, 100vw) !important;
+    position: fixed; top: var(--topbar-h); right: 0; bottom: 0; z-index: 30; width: 100vw !important;
     transform: translateX(105%); transition: transform 0.2s; box-shadow: var(--shadow); border-left: 1px solid var(--border);
     display: flex !important;
   }

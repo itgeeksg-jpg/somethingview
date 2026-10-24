@@ -517,12 +517,30 @@ async function watchVersion() {
 async function init() {
   watchVersion();
   // Get the latest lists from other devices before the first render (don't wait forever)
-  await Promise.race([sync.start(), new Promise(r => setTimeout(r, 4000))]);
+  const synced = await Promise.race([sync.start().then(() => true), new Promise(r => setTimeout(r, 4000, false))]);
   if (!Array.isArray(s().indicators)) s().indicators = DEFAULT_INDICATORS();
   // Watchlist text got bigger: widen the old default panel once so the Chg column still fits
   if (!s().ui.wlWidened) {
     if (s().ui.watchWidth <= 330) s().ui.watchWidth = 370;
     s().ui.wlWidened = true;
+    store.save(false);
+  }
+  // Add the AI list once. Wait for sync so a device that already got it from another device doesn't add a second one.
+  if (synced && !s().ui.aiListAdded) {
+    if (!Object.values(s().lists).some(l => l.name === 'AI')) {
+      const id = uid();
+      s().lists[id] = { id, name: 'AI', items: [
+        '###Index & ETFs', 'SOX', 'SMH', 'AIQ', 'BOTZ',
+        '###Chips', 'NVDA', 'AMD', 'AVGO', 'TSM', 'ASML', 'MU', 'ARM', 'MRVL', 'AMAT', 'LRCX', '000660.KS', '8035.T',
+        '###Hyperscalers', 'MSFT', 'GOOGL', 'AMZN', 'META', 'ORCL', 'AAPL', 'TSLA',
+        '###Neoclouds & hardware', 'CRWV', 'NBIS', 'SMCI', 'DELL', 'ANET', 'VRT', '9984.T',
+        '###Power', 'VST', 'CEG',
+        '###Software', 'PLTR', 'NOW', 'SNOW', 'AI', 'SOUN',
+      ] };
+      s().listOrder.push(id);
+      store.save();
+    }
+    s().ui.aiListAdded = true;
     store.save(false);
   }
   // FiBB changed from VWMA±StdDev (length/source/mult) to SMA±ratio×ATR (Len + 3 ratios): drop old-style settings

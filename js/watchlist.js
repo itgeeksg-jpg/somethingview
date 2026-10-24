@@ -67,8 +67,9 @@ export class Watchlist {
     const ui = store.s.ui;
     const px = WL_SIZES[ui.wlSize]?.[1] || WL_SIZES.M[1];
     this.el.style.setProperty('--wl-fs', `${px}px`);
-    // symbol ≥ 4.5em + avatar + 3 number columns + gaps/padding
-    const needed = px * (1.35 + 4.5 + 5.9 + 5.1 + 4.3) + 48;
+    // symbol ≥ 4.5em + avatar + 3 number columns + 5 column gaps + row padding (wider on touch screens)
+    const cs = getComputedStyle(this.cols);
+    const needed = px * (1.35 + 4.5 + 5.9 + 5.1 + 4.3) + 5 * 6 + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
     const narrow = this.el.clientWidth > 0 && this.el.clientWidth < needed;
     this.el.classList.toggle('hide-chg', ui.wlShowChg === false || narrow);
   }
