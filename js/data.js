@@ -393,13 +393,15 @@ export function subscribeBars(res, iv, onBar) {
       onBar(bnToBar([k.t, k.o, k.h, k.l, k.c, k.v], iv));
     });
   }
-  let stopped = false;
+  let stopped = false, busy = false;
   const tick = async () => {
-    if (stopped || document.hidden) return;
+    // Slow or stuck requests (bad Wi-Fi, after sleep) mustn't pile up behind each other
+    if (stopped || busy || document.hidden) return;
+    busy = true;
     try {
       const { bars } = await yahooBars(res.sym, iv, INTERVALS[iv].poll);
       if (!stopped) bars.slice(-3).forEach(onBar);
-    } catch { /* keep polling */ }
+    } catch { /* keep polling */ } finally { busy = false; }
   };
   const id = setInterval(tick, Math.max(10, store.s.settings.refreshSec) * 1000);
   // Catch up straight away when you come back to the tab instead of waiting for the next tick
@@ -543,8 +545,10 @@ export class QuoteFeed {
 
   poll() {
     const syms = document.hidden ? this.mainYahoo : this.yahoo;
-    if (!syms.length) return;
-    yahooQuotes(syms).then(() => this.onUpdate());
+    // Skip while the previous poll is still running, so slow requests can't queue up for hours
+    if (!syms.length || this.polling) return;
+    this.polling = true;
+    yahooQuotes(syms).then(() => this.onUpdate()).finally(() => { this.polling = false; });
   }
 }
 

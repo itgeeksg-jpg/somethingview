@@ -572,7 +572,12 @@ async function init() {
     onChange: () => refreshFeed(),
     getCurrent: () => s().symbol,
   });
-  feed = new QuoteFeed(sym => { wl.updateQuotes(sym); details.render(); updateTitle(); });
+  feed = new QuoteFeed(changed => {
+    wl.updateQuotes(changed);
+    // Live Binance ticks name the symbols that changed: skip the details panel unless it shows one of them
+    if (!changed || leaves(details.res || {}).some(l => l.src === 'binance' && changed.has(l.sym))) details.render();
+    updateTitle();
+  });
   sync.onRemote(onRemoteSync);
 
   // toolbar

@@ -95,11 +95,14 @@ export function closeMenu() {
   if (openMenu) { openMenu.off(); openMenu.el.remove(); openMenu = null; }
 }
 
+// Icons that failed to load. Missing ones come back as uncacheable 404s, so don't ask again on every redraw
+const badIcons = new Set();
+
 export function avatar(r, size = 20) {
   const url = icon(r);
   const el = h('span', { class: 'avatar', style: { width: `${size}px`, height: `${size}px`, background: hashColor(r.display), fontSize: `${Math.round(size * 0.5)}px` } }, avatarText(r));
-  if (url) {
-    const img = h('img', { src: url, alt: '', loading: 'lazy', onerror: () => img.remove() });
+  if (url && !badIcons.has(url)) {
+    const img = h('img', { src: url, alt: '', loading: 'lazy', onerror: () => { badIcons.add(url); img.remove(); } });
     el.append(img);
   }
   return el;

@@ -170,8 +170,8 @@ export class ChartView {
     this._livePending = false;
     const n = this.bars.length;
     if (n - this._appliedLen > 1) { this.setAllData(); return; }
-    const pts = this.mainData();
-    this.main.update(pts[n - 1]);
+    // Heikin Ashi bars depend on the bars before them; the other types only need the last one
+    this.main.update(this.chartType === 'heikin' ? this.mainData()[n - 1] : this.mainPoint(this.bars[n - 1]));
     for (const e of this.ind) {
       e.out = this.compute(e);
       for (const [key, s] of Object.entries(e.series)) s.update(this.point(e.out[key], n - 1, e.priceOverlay));
@@ -182,8 +182,12 @@ export class ChartView {
 
   mainData() {
     const src = this.chartType === 'heikin' ? heikinAshi(this.bars) : this.bars;
-    if (this.chartType === 'line' || this.chartType === 'area') return src.map(b => ({ time: b.time, value: b.close }));
-    return src.map(b => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }));
+    return src.map(b => this.mainPoint(b));
+  }
+
+  mainPoint(b) {
+    if (this.chartType === 'line' || this.chartType === 'area') return { time: b.time, value: b.close };
+    return { time: b.time, open: b.open, high: b.high, low: b.low, close: b.close };
   }
 
   compute(e) {

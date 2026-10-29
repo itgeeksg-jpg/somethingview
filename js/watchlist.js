@@ -257,6 +257,7 @@ export class Watchlist {
 
   // `onlyBinance`: optional Set of Binance symbols that changed (live ticks)
   updateQuotes(onlyBinance) {
+    const flashes = [];
     for (const [key, row] of this.rows) {
       const r = res(key);
       if (onlyBinance && !leaves(r).some(l => l.src === 'binance' && onlyBinance.has(l.sym))) continue;
@@ -267,11 +268,7 @@ export class Watchlist {
       const p = q.precision ?? autoPrecision(q.price);
       const prev = this.last.get(key);
       last.textContent = fmtPrice(q.price, p);
-      if (prev != null && prev !== q.price) {
-        last.classList.remove('flash-up', 'flash-down');
-        void last.offsetWidth;
-        last.classList.add(q.price > prev ? 'flash-up' : 'flash-down');
-      }
+      if (prev != null && prev !== q.price) flashes.push([last, q.price > prev ? 'flash-up' : 'flash-down']);
       this.last.set(key, q.price);
       chg.textContent = fmtSigned(q.change, p);
       pct.textContent = fmtPct(q.pct);
@@ -280,6 +277,11 @@ export class Watchlist {
       pct.className = `c-pct ${c}`;
       row.classList.toggle('closed', q.open === false);
     }
+    // Restart the flash animations: remove, force one layout, add back
+    if (!flashes.length) return;
+    for (const [el] of flashes) el.classList.remove('flash-up', 'flash-down');
+    void this.body.offsetWidth;
+    for (const [el, cls] of flashes) el.classList.add(cls);
   }
 
   setActive(key) {
