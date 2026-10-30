@@ -525,27 +525,42 @@ async function init() {
     s().ui.wlWidened = true;
     store.save(false);
   }
-  // Add the AI list once and put it under "Recently used" (per device) so it's in the list menu.
+  // Add a built-in list once and put it under "Recently used" (per device) so it's in the list menu.
   // Wait for sync so a device that already got it from another device doesn't add a second one.
-  if (synced && !s().ui.aiListShown) {
-    let ai = Object.values(s().lists).find(l => l.name === 'AI');
-    if (!ai) {
+  const addListOnce = (flag, name, items) => {
+    if (!synced || s().ui[flag]) return;
+    let list = Object.values(s().lists).find(l => l.name === name);
+    if (!list) {
       const id = uid();
-      ai = s().lists[id] = { id, name: 'AI', items: [
-        '###Index & ETFs', 'SOX', 'SMH', 'AIQ', 'BOTZ',
-        '###Chips', 'NVDA', 'AMD', 'AVGO', 'TSM', 'ASML', 'MU', 'ARM', 'MRVL', 'AMAT', 'LRCX', '000660.KS', '8035.T',
-        '###Hyperscalers', 'MSFT', 'GOOGL', 'AMZN', 'META', 'ORCL', 'AAPL', 'TSLA',
-        '###Neoclouds & hardware', 'CRWV', 'NBIS', 'SMCI', 'DELL', 'ANET', 'VRT', '9984.T',
-        '###Power', 'VST', 'CEG',
-        '###Software', 'PLTR', 'NOW', 'SNOW', 'AI', 'SOUN',
-      ] };
+      list = s().lists[id] = { id, name, items };
       s().listOrder.push(id);
       store.save();
     }
-    s().recentLists = [ai.id, ...s().recentLists.filter(x => x !== ai.id)].slice(0, 6);
-    s().ui.aiListShown = true;
+    s().recentLists = [list.id, ...s().recentLists.filter(x => x !== list.id)].slice(0, 6);
+    s().ui[flag] = true;
     store.save(false);
-  }
+  };
+  addListOnce('aiListShown', 'AI', [
+    '###Index & ETFs', 'SOX', 'SMH', 'AIQ', 'BOTZ',
+    '###Chips', 'NVDA', 'AMD', 'AVGO', 'TSM', 'ASML', 'MU', 'ARM', 'MRVL', 'AMAT', 'LRCX', '000660.KS', '8035.T',
+    '###Hyperscalers', 'MSFT', 'GOOGL', 'AMZN', 'META', 'ORCL', 'AAPL', 'TSLA',
+    '###Neoclouds & hardware', 'CRWV', 'NBIS', 'SMCI', 'DELL', 'ANET', 'VRT', '9984.T',
+    '###Power', 'VST', 'CEG',
+    '###Software', 'PLTR', 'NOW', 'SNOW', 'AI', 'SOUN',
+  ]);
+  // Largest US-listed ETFs by assets in each sector
+  addListOnce('etfListShown', 'ETFs', [
+    '###Broad market', 'SPY', 'VOO', 'QQQ', 'VTI', 'IWM',
+    '###Energy', 'XLE', 'VDE', 'XOP', 'AMLP', 'OIH', 'USO', 'URA', 'ICLN',
+    '###Metals & mining', 'GLD', 'IAU', 'GLDM', 'SLV', 'GDX', 'GDXJ', 'COPX', 'XME', 'PPLT',
+    '###Consumer', 'XLY', 'VCR', 'XRT', 'XLP', 'VDC',
+    '###Tech & comms', 'XLK', 'VGT', 'SMH', 'XLC',
+    '###Financials', 'XLF', 'VFH', 'KRE',
+    '###Health care', 'XLV', 'VHT', 'XBI', 'IBB',
+    '###Industrials & materials', 'XLI', 'ITA', 'XLB',
+    '###Utilities & real estate', 'XLU', 'VPU', 'VNQ', 'XLRE',
+    '###Bonds', 'TLT', 'BND', 'AGG', 'HYG',
+  ]);
   // FiBB changed from VWMA±StdDev (length/source/mult) to SMA±ratio×ATR (Len + 3 ratios): drop old-style settings
   const oldFibb = x => x && x.params && ('mult' in x.params || 'source' in x.params);
   for (const inst of s().indicators) if (inst.type === 'FIBB' && oldFibb(inst)) Object.assign(inst, { params: {}, colors: {}, styles: {} });
